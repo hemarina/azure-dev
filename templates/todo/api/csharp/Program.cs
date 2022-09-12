@@ -15,7 +15,7 @@ var app = builder.Build();
 
 app.UseCors(policy =>
 {
-    policy.AllowAnyOrigin();
+    policy.SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost");
     policy.AllowAnyHeader();
     policy.AllowAnyMethod();
 });
