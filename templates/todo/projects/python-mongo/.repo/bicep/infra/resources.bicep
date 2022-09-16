@@ -82,4 +82,3 @@ output AZURE_COSMOS_DATABASE_NAME string = cosmos.outputs.cosmosDatabaseName
 output AZURE_COSMOS_ENDPOINT string = cosmos.outputs.cosmosEndpoint
 output AZURE_KEY_VAULT_ENDPOINT string = keyVault.outputs.keyVaultEndpoint
 output WEB_URI string = web.outputs.WEB_URI
-output WEB_API_HOST string = api.outputs.API_URI
