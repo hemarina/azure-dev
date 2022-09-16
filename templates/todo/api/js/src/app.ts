@@ -17,7 +17,11 @@ export const createApp = async (): Promise<Express> => {
     await configureMongoose(config.database);
     // Middleware
     app.use(express.json());
-    app.use(cors());
+    const allowedOrigins: string[] = ["https://localhost:3000",
+        "https://ms.portal.azure.com", process.env.WEB_API_HOST as string];
+    app.use(cors({
+        origin: allowedOrigins
+    }));
 
     // API Routes
     app.use("/lists/:listId/items", items);

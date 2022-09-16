@@ -41,3 +41,4 @@ output REACT_APP_WEB_BASE_URL string = resources.outputs.WEB_URI
 output REACT_APP_API_BASE_URL string = resources.outputs.API_URI
 output REACT_APP_APPLICATIONINSIGHTS_CONNECTION_STRING string = resources.outputs.APPLICATIONINSIGHTS_CONNECTION_STRING
 output AZURE_LOCATION string = location
+output WEB_API_HOST string = resources.outputs.WEB_API_HOST

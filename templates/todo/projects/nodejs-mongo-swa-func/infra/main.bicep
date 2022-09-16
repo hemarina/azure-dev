@@ -42,3 +42,4 @@ output REACT_APP_API_BASE_URL string = resources.outputs.API_URI
 output REACT_APP_APPLICATIONINSIGHTS_CONNECTION_STRING string = resources.outputs.APPLICATIONINSIGHTS_CONNECTION_STRING
 output AZURE_LOCATION string = location
 output AZURE_TENANT_ID string = tenant().tenantId
+output WEB_API_HOST string = resources.outputs.WEB_API_HOST

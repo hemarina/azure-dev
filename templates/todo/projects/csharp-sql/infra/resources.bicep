@@ -80,6 +80,7 @@ resource api 'Microsoft.Web/sites@2022-03-01' = {
       AZURE_SQL_CONNECTION_STRING_KEY: sqlConnectionStringSecretName
       APPLICATIONINSIGHTS_CONNECTION_STRING: applicationInsightsResources.outputs.APPLICATIONINSIGHTS_CONNECTION_STRING
       AZURE_KEY_VAULT_ENDPOINT: keyVault.properties.vaultUri
+      WEB_API_HOST: 'https://${web.properties.defaultHostName}'
     }
   }
 
@@ -217,3 +218,4 @@ output WEB_URI string = 'https://${web.properties.defaultHostName}'
 output API_URI string = 'https://${api.properties.defaultHostName}'
 output AZURE_SQL_CONNECTION_STRING_KEY string = sqlConnectionStringSecretName
 output KEYVAULT_NAME string = keyVault.name
+output WEB_API_HOST string = 'https://${web.properties.defaultHostName}'

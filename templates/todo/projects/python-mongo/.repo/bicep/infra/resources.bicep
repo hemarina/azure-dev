@@ -82,6 +82,7 @@ resource api 'Microsoft.Web/sites@2022-03-01' = {
       SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
       AZURE_KEY_VAULT_ENDPOINT: keyVault.properties.vaultUri
       APPLICATIONINSIGHTS_CONNECTION_STRING: applicationInsightsResources.outputs.APPLICATIONINSIGHTS_CONNECTION_STRING
+      WEB_API_HOST: 'https://${web.properties.defaultHostName}'
     }
   }
 
@@ -277,3 +278,4 @@ output AZURE_KEY_VAULT_ENDPOINT string = keyVault.properties.vaultUri
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = applicationInsightsResources.outputs.APPLICATIONINSIGHTS_CONNECTION_STRING
 output WEB_URI string = 'https://${web.properties.defaultHostName}'
 output API_URI string = 'https://${api.properties.defaultHostName}'
+output WEB_API_HOST string = 'https://${web.properties.defaultHostName}'

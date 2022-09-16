@@ -56,6 +56,7 @@ resource api 'Microsoft.Web/sites@2022-03-01' = {
       AZURE_COSMOS_CONNECTION_STRING_KEY: 'AZURE-COSMOS-CONNECTION-STRING'
       AZURE_COSMOS_DATABASE_NAME: cosmos::database.name
       AZURE_KEY_VAULT_ENDPOINT: keyVault.properties.vaultUri
+      WEB_API_HOST: 'https://${web.properties.defaultHostname}'
     }
   }
 
@@ -273,3 +274,4 @@ output AZURE_KEY_VAULT_ENDPOINT string = keyVault.properties.vaultUri
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = applicationInsightsResources.outputs.APPLICATIONINSIGHTS_CONNECTION_STRING
 output WEB_URI string = 'https://${web.properties.defaultHostname}'
 output API_URI string = 'https://${api.properties.defaultHostName}'
+output WEB_API_HOST string = 'https://${web.properties.defaultHostname}'
