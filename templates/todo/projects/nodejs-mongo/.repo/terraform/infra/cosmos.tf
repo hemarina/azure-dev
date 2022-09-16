@@ -19,14 +19,13 @@ resource "azurerm_cosmosdb_account" "db" {
   mongo_server_version            = "4.0"
   tags                            = local.tags
 
-  lifecycle {
-    ignore_changes = [capabilities]
-  }
-
   capabilities {
     name = "EnableServerless"
   }
 
+  lifecycle {
+    ignore_changes = [capabilities]
+  }
   consistency_policy {
     consistency_level = "Session"
   }
