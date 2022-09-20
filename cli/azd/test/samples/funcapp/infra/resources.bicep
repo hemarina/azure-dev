@@ -20,8 +20,8 @@ resource functions 'Microsoft.Web/sites@2022-03-01' = {
       ftpsState: 'FtpsOnly'
       cors: {
         allowedOrigins: [
-          // allow testing through the Azure portal
-          'https://ms.portal.azure.com'
+          // allow testing through the Azure portal and local host
+          'https://ms.portal.azure.com', 'https://localhost:3000'
         ]
         supportCredentials: false
       }

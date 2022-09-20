@@ -10,7 +10,10 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 # CORS origins
 origins = [
-    "*",
+    "https://localhost:3000",
+    "https://portal.azure.com",
+    "https://ms.portal.azure.com"
+    #process.env.REACT_APP_WEB_BASE_URL
 ]
 
 from .models import Settings, __beanie_models__

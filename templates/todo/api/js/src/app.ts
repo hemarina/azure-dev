@@ -17,8 +17,9 @@ export const createApp = async (): Promise<Express> => {
     await configureMongoose(config.database);
     // Middleware
     app.use(express.json());
-    const allowedOrigins: string[] = ["https://localhost:3000",
-        "https://ms.portal.azure.com", process.env.WEB_API_HOST as string];
+    const allowedOrigins: string[] = ["https://localhost:3000","https://portal.azure.com",
+        "https://ms.portal.azure.com"];
+        //, process.env.REACT_APP_WEB_BASE_URL as string
     app.use(cors({
         origin: allowedOrigins
     }));

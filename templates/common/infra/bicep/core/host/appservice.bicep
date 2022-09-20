@@ -42,7 +42,7 @@ resource appService 'Microsoft.Web/sites@2022-03-01' = {
       use32BitWorkerProcess: use32BitWorkerProcess
       functionAppScaleLimit: functionAppScaleLimit != -1 ? functionAppScaleLimit : null
       cors: {
-        allowedOrigins: union([ 'https://portal.azure.com', 'https://ms.portal.azure.com' ], allowedOrigins)
+        allowedOrigins: union([ 'https://portal.azure.com', 'https://ms.portal.azure.com', 'https://localhost:3000' ], allowedOrigins)
       }
     }
     clientAffinityEnabled: clientAffinityEnabled
