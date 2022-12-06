@@ -5,12 +5,13 @@ package azureutil
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
 
+	"github.com/azure/azure-dev/cli/azd/pkg/account"
+	"github.com/azure/azure-dev/cli/azd/pkg/config"
 	"github.com/azure/azure-dev/cli/azd/pkg/environment"
 	"github.com/azure/azure-dev/cli/azd/pkg/input"
 	"github.com/azure/azure-dev/cli/azd/pkg/tools/azcli"
@@ -25,11 +26,15 @@ func (s Locs) Less(i, j int) bool {
 func (s Locs) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 // PromptLocation asks the user to select a location from a list of supported azure location
-func PromptLocation(ctx context.Context, message string) (string, error) {
-	azCli := azcli.GetAzCli(ctx)
-	console := input.GetConsole(ctx)
+func PromptLocation(
+	ctx context.Context, env *environment.Environment, message string, console input.Console, azCli azcli.AzCli,
+) (string, error) {
+	accountManager, err := account.NewManager(config.NewManager(), azCli)
+	if err != nil {
+		return "", fmt.Errorf("failed creating account manager: %w", err)
+	}
 
-	locations, err := azCli.ListAccountLocations(ctx)
+	locations, err := accountManager.GetLocations(ctx, env.GetSubscriptionId())
 	if err != nil {
 		return "", fmt.Errorf("listing locations: %w", err)
 	}
@@ -40,22 +45,14 @@ func PromptLocation(ctx context.Context, message string) (string, error) {
 	// selection.
 	defaultLocation := os.Getenv(environment.LocationEnvVarName)
 
-	// If no location is set in the process environment, see what the CLI default is.
+	// If no location is set in the process environment, see what the azd config default is.
 	if defaultLocation == "" {
-		defaultLocationConfig, err := azCli.GetCliConfigValue(ctx, "defaults.location")
-		if errors.Is(err, azcli.ErrNoConfigurationValue) {
-			// If no value has been configured, that's okay we just won't have a default
-			// in our list.
-		} else if err != nil {
-			return "", fmt.Errorf("detecting default location: %w", err)
-		} else {
-			defaultLocation = defaultLocationConfig.Value
+		defaultConfig, err := accountManager.GetAccountDefaults(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed retrieving azd defaults. %w", err)
 		}
-	}
 
-	// If we still couldn't figure out a default location, offer eastus2 as a default
-	if defaultLocation == "" {
-		defaultLocation = "eastus2"
+		defaultLocation = defaultConfig.DefaultLocation.Name
 	}
 
 	var defaultOption string

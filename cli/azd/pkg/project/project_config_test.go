@@ -6,8 +6,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
+	"github.com/azure/azure-dev/cli/azd/pkg/convert"
 	"github.com/azure/azure-dev/cli/azd/pkg/environment"
+	"github.com/azure/azure-dev/cli/azd/pkg/infra"
 	"github.com/azure/azure-dev/cli/azd/test/mocks"
+	"github.com/azure/azure-dev/cli/azd/test/mocks/mockarmresources"
+	"github.com/azure/azure-dev/cli/azd/test/mocks/mockazcli"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +33,9 @@ services:
     host: appservice
 `
 
-	e := environment.EphemeralWithValues("test-env", nil)
+	e := environment.EphemeralWithValues("test-env", map[string]string{
+		environment.SubscriptionIdEnvVarName: "SUBSCRIPTION_ID",
+	})
 
 	projectConfig, err := ParseProjectConfig(testProj, e)
 	require.Nil(t, err)
@@ -63,7 +70,9 @@ services:
     host: appservice
 `
 
-	e := environment.EphemeralWithValues("test-env", nil)
+	e := environment.EphemeralWithValues("test-env", map[string]string{
+		environment.SubscriptionIdEnvVarName: "SUBSCRIPTION_ID",
+	})
 
 	projectConfig, err := ParseProjectConfig(testProj, e)
 	require.Nil(t, err)
@@ -90,13 +99,40 @@ services:
     host: appservice
 `
 	mockContext := mocks.NewMockContext(context.Background())
+	mockarmresources.AddAzResourceListMock(
+		mockContext.HttpClient,
+		convert.RefOf("rg-test"),
+		[]*armresources.GenericResourceExpanded{
+			{
+				ID:       convert.RefOf("test-api"),
+				Name:     convert.RefOf("test-api"),
+				Type:     convert.RefOf(string(infra.AzureResourceTypeWebSite)),
+				Location: convert.RefOf("eastus"),
+				Tags: map[string]*string{
+					defaultServiceTag: convert.RefOf("api"),
+				},
+			},
+			{
+				ID:       convert.RefOf("test-web"),
+				Name:     convert.RefOf("test-web"),
+				Type:     convert.RefOf(string(infra.AzureResourceTypeWebSite)),
+				Location: convert.RefOf("eastus"),
+				Tags: map[string]*string{
+					defaultServiceTag: convert.RefOf("web"),
+				},
+			},
+		},
+	)
+	azCli := mockazcli.NewAzCliFromMockContext(mockContext)
 
-	e := environment.EphemeralWithValues("test-env", nil)
+	e := environment.EphemeralWithValues("test-env", map[string]string{
+		environment.SubscriptionIdEnvVarName: "SUBSCRIPTION_ID",
+	})
 
 	projectConfig, err := ParseProjectConfig(testProj, e)
 	require.Nil(t, err)
 
-	project, err := projectConfig.GetProject(mockContext.Context, e)
+	project, err := projectConfig.GetProject(*mockContext.Context, e, mockContext.Console, azCli, mockContext.CommandRunner)
 	require.Nil(t, err)
 	require.NotNil(t, project)
 
@@ -107,7 +143,7 @@ services:
 		require.NotNil(t, svc.Config)
 		require.NotNil(t, svc.Framework)
 		require.NotNil(t, svc.Target)
-		require.NotNil(t, svc.Scope)
+		require.NotNil(t, svc.TargetResource)
 	}
 }
 
@@ -126,7 +162,9 @@ services:
       path: ./Dockerfile.dev
       context: ../
 `
-	e := environment.EphemeralWithValues("test-env", nil)
+	e := environment.EphemeralWithValues("test-env", map[string]string{
+		environment.SubscriptionIdEnvVarName: "SUBSCRIPTION_ID",
+	})
 
 	projectConfig, err := ParseProjectConfig(testProj, e)
 
@@ -153,7 +191,9 @@ services:
     module: ./api/api
 `
 
-	e := environment.EphemeralWithValues("test-env", nil)
+	e := environment.EphemeralWithValues("test-env", map[string]string{
+		environment.SubscriptionIdEnvVarName: "SUBSCRIPTION_ID",
+	})
 
 	projectConfig, err := ParseProjectConfig(testProj, e)
 
@@ -316,7 +356,9 @@ services:
     module: ./api/api
 `
 
-	e := environment.EphemeralWithValues("test-env", nil)
+	e := environment.EphemeralWithValues("test-env", map[string]string{
+		environment.SubscriptionIdEnvVarName: "SUBSCRIPTION_ID",
+	})
 
 	projectConfig, _ := ParseProjectConfig(testProj, e)
 

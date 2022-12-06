@@ -15,18 +15,40 @@ words:
     - bson
     - azdo
 ignoreWords:
-    - magefile
     - afwp
+    - apim
+    - appcontainers
     - appcs
     - appi
     - arck
+    - armauthorization
+    - armappcontainers
+    - armappservice
+    - armkeyvault
+    - armresources
+    - armruntime
+    - armsubscriptions
+    - azconnection
+    - azurewebsites
+    - azcore
+    - Azdo
+    - aztfmod
+    - azurecaf
+    - azuredevops
+    - azurerm
+    - armcontainerregistry
+    - azidentity
+    - azsecrets
     - Bfor
     - bicepcli
     - cdne
     - cdnp
     - commandrunner
+    - conjunction
+    - containerregistry
     - databricks
     - dedb
+    - devcontainer
     - dnsz
     - evgd
     - evgs
@@ -35,29 +57,46 @@ ignoreWords:
     - execfn
     - execmock
     - fdfp
+    - fics
     - Frontdoor
+    - graphsdk
     - hndl
     - httpclient
+    - httptrigger
     - inputhelper
     - ippre
     - JOBOBJECT
     - kubernetes
     - kusto
+    - magefile
+    - mainfic
+    - menuid
     - migr
+    - mockconfig
     - mockconsole
     - mockexec
     - mockhttp
     - MYDIR
     - nsgsr
     - ntfns
+    - odata
     - osdisk
     - osexec
+    - oidc
     - pcert
     - pdnsz
     - Peerings
+    - PLACEHOLDERIACTOOLS
     - provs
     - psql
     - pview
+    - resourcegroups
+    - resourcegroupterraform
+    - resourcegroupterraformremote
+    - Retryable
+    - serviceendpoint
+    - serviceprincipalid
+    - serviceprincipalkey
     - sigr
     - snet
     - sqldb
@@ -67,21 +106,27 @@ ignoreWords:
     - srch
     - ssimp
     - stapp
+    - startswith
     - stvm
     - syndp
     - synsp
     - synw
+    - taskagent
     - TEAMPROJECTID
+    - tenantid
     - terraformcli
-    - tfvars
+    - tfsgit
     - tfstate
+    - tfvars
     - traf
     - useragent
+    - versioncontrol
     - vmss
     - vnet
     - vpng
     - vwan
     - wafrg
+    - westus
     - Wans
     - apim
     - Retryable
@@ -89,12 +134,15 @@ ignoreWords:
     - resourcegroups
     - resourcegroupterraform
     - resourcegroupterraformremote
+    - resourcemanager
     - devcontainer
     - azurecaf
     - azurerm
     - aztfmod
     - menuid
     - PLACEHOLDERIACTOOLS
+    - LOGANALYTICS
+    - zipdeploy
 useGitignore: true
 dictionaryDefinitions:
     - name: gitHubUserAliases

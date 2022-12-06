@@ -7,64 +7,96 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/azure/azure-dev/cli/azd/cmd/actions"
 	"github.com/azure/azure-dev/cli/azd/internal"
-	"github.com/azure/azure-dev/cli/azd/pkg/commands"
 	"github.com/azure/azure-dev/cli/azd/pkg/environment/azdcontext"
+	"github.com/azure/azure-dev/cli/azd/pkg/exec"
 	"github.com/azure/azure-dev/cli/azd/pkg/input"
 	"github.com/azure/azure-dev/cli/azd/pkg/project"
 	"github.com/azure/azure-dev/cli/azd/pkg/spin"
 	"github.com/azure/azure-dev/cli/azd/pkg/tools"
+	"github.com/azure/azure-dev/cli/azd/pkg/tools/azcli"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-func restoreCmd(rootOptions *internal.GlobalCommandOptions) *cobra.Command {
-	cmd := commands.Build(
-		&restoreAction{
-			rootOptions: rootOptions,
-		},
-		rootOptions,
-		"restore",
-		"Restore application dependencies.",
-		&commands.BuildOptions{
-			Long: `Restore application dependencies.
+type restoreFlags struct {
+	global      *internal.GlobalCommandOptions
+	serviceName string
+	envFlag
+}
+
+func (r *restoreFlags) Bind(local *pflag.FlagSet, global *internal.GlobalCommandOptions) {
+	local.StringVar(
+		&r.serviceName,
+		"service",
+		"",
+		//nolint:lll
+		"Restores a specific service (when the string is unspecified, all services that are listed in the "+azdcontext.ProjectFileName+" file are restored).",
+	)
+	r.envFlag.Bind(local, global)
+	r.global = global
+}
+
+func restoreCmdDesign(global *internal.GlobalCommandOptions) (*cobra.Command, *restoreFlags) {
+	cmd := &cobra.Command{
+		Use:   "restore",
+		Short: "Restore application dependencies.",
+		//nolint:lll
+		Long: `Restore application dependencies.
 
 Run this command to download and install all the required libraries so that you can build, run, and debug the application locally.
 
 For the best local run and debug experience, go to https://aka.ms/azure-dev/vscode to learn how to use the Visual Studio Code extension.`,
-		})
-	return cmd
+	}
+
+	flags := &restoreFlags{}
+	flags.Bind(cmd.Flags(), global)
+	return cmd, flags
 }
 
 type restoreAction struct {
-	rootOptions *internal.GlobalCommandOptions
-	serviceName string
+	flags         restoreFlags
+	console       input.Console
+	azCli         azcli.AzCli
+	azdCtx        *azdcontext.AzdContext
+	commandRunner exec.CommandRunner
 }
 
-func (r *restoreAction) SetupFlags(persis, local *pflag.FlagSet) {
-	local.StringVar(&r.serviceName, "service", "", "Restores a specific service (when the string is unspecified, all services that are listed in the "+azdcontext.ProjectFileName+" file are restored).")
+func newRestoreAction(
+	flags restoreFlags,
+	azCli azcli.AzCli,
+	console input.Console,
+	azdCtx *azdcontext.AzdContext,
+	commandRunner exec.CommandRunner,
+) *restoreAction {
+	return &restoreAction{
+		flags:         flags,
+		console:       console,
+		azdCtx:        azdCtx,
+		azCli:         azCli,
+		commandRunner: commandRunner,
+	}
 }
 
-func (r *restoreAction) Run(ctx context.Context, _ *cobra.Command, args []string, azdCtx *azdcontext.AzdContext) error {
-	console := input.GetConsole(ctx)
-
-	if err := ensureProject(azdCtx.ProjectPath()); err != nil {
-		return err
+func (r *restoreAction) Run(ctx context.Context) (*actions.ActionResult, error) {
+	if err := ensureProject(r.azdCtx.ProjectPath()); err != nil {
+		return nil, err
 	}
 
-	env, ctx, err := loadOrInitEnvironment(ctx, &r.rootOptions.EnvironmentName, azdCtx, console)
+	env, ctx, err := loadOrInitEnvironment(ctx, &r.flags.environmentName, r.azdCtx, r.console, r.azCli)
 	if err != nil {
-		return fmt.Errorf("loading environment: %w", err)
+		return nil, fmt.Errorf("loading environment: %w", err)
 	}
 
-	proj, err := project.LoadProjectConfig(azdCtx.ProjectPath(), env)
+	proj, err := project.LoadProjectConfig(r.azdCtx.ProjectPath(), env)
 
 	if err != nil {
-		return fmt.Errorf("loading project: %w", err)
+		return nil, fmt.Errorf("loading project: %w", err)
 	}
 
-	if r.serviceName != "" && !proj.HasService(r.serviceName) {
-		return fmt.Errorf("service name '%s' doesn't exist", r.serviceName)
+	if r.flags.serviceName != "" && !proj.HasService(r.flags.serviceName) {
+		return nil, fmt.Errorf("service name '%s' doesn't exist", r.flags.serviceName)
 	}
 
 	count := 0
@@ -74,10 +106,10 @@ func (r *restoreAction) Run(ctx context.Context, _ *cobra.Command, args []string
 	// the tools for that project, otherwise we need the tools from all project.
 	allTools := []tools.ExternalTool{}
 	for _, svc := range proj.Services {
-		if r.serviceName == "" || r.serviceName == svc.Name {
-			frameworkService, err := svc.GetFrameworkService(ctx, env)
+		if r.flags.serviceName == "" || r.flags.serviceName == svc.Name {
+			frameworkService, err := svc.GetFrameworkService(ctx, env, r.commandRunner)
 			if err != nil {
-				return fmt.Errorf("getting framework services: %w", err)
+				return nil, fmt.Errorf("getting framework services: %w", err)
 			}
 			requiredTools := (*frameworkService).RequiredExternalTools()
 			allTools = append(allTools, requiredTools...)
@@ -85,31 +117,31 @@ func (r *restoreAction) Run(ctx context.Context, _ *cobra.Command, args []string
 	}
 
 	if err := tools.EnsureInstalled(ctx, tools.Unique(allTools)...); err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, svc := range proj.Services {
-		if r.serviceName != "" && svc.Name != r.serviceName {
+		if r.flags.serviceName != "" && svc.Name != r.flags.serviceName {
 			continue
 		}
 
 		installMsg := fmt.Sprintf("Installing dependencies for %s service...", svc.Name)
-		frameworkService, err := svc.GetFrameworkService(ctx, env)
+		frameworkService, err := svc.GetFrameworkService(ctx, env, r.commandRunner)
 		if err != nil {
-			return fmt.Errorf("getting framework services: %w", err)
+			return nil, fmt.Errorf("getting framework services: %w", err)
 		}
 
-		spinner := spin.NewSpinner(installMsg)
+		spinner := spin.NewSpinner(r.console.Handles().Stdout, installMsg)
 		if err = spinner.Run(func() error { return (*frameworkService).InstallDependencies(ctx) }); err != nil {
-			return err
+			return nil, err
 		}
 
 		count++
 	}
 
-	if r.serviceName != "" && count == 0 {
-		return fmt.Errorf("Dependencies were not restored (%s service was not found)", r.serviceName)
+	if r.flags.serviceName != "" && count == 0 {
+		return nil, fmt.Errorf("Dependencies were not restored (%s service was not found)", r.flags.serviceName)
 	}
 
-	return nil
+	return nil, nil
 }

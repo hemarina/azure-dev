@@ -27,6 +27,8 @@ type TerraformCli interface {
 	Apply(ctx context.Context, modulePath string, additionalArgs ...string) (string, error)
 	// Retrieves the output variables from the most recent deployment state
 	Output(ctx context.Context, modulePath string, additionalArgs ...string) (string, error)
+	// Retrieves information about the infrastructure from the current deployment state
+	Show(ctx context.Context, modulePath string, additionalArgs ...string) (string, error)
 	// Destroys all resources referenced in the terraform module
 	Destroy(ctx context.Context, modulePath string, additionalArgs ...string) (string, error)
 }
@@ -36,17 +38,9 @@ type terraformCli struct {
 	env           []string
 }
 
-type NewTerraformCliArgs struct {
-	commandRunner exec.CommandRunner
-}
-
-func NewTerraformCli(args NewTerraformCliArgs) TerraformCli {
-	if args.commandRunner == nil {
-		args.commandRunner = exec.NewCommandRunner()
-	}
-
+func NewTerraformCli(commandRunner exec.CommandRunner) TerraformCli {
 	return &terraformCli{
-		commandRunner: args.commandRunner,
+		commandRunner: commandRunner,
 	}
 }
 
@@ -112,7 +106,7 @@ func (cli *terraformCli) runInteractive(ctx context.Context, args ...string) (ex
 }
 
 func (cli *terraformCli) unmarshalCliVersion(ctx context.Context, component string) (string, error) {
-	azRes, err := tools.ExecuteCommand(ctx, "terraform", "version", "-json")
+	azRes, err := tools.ExecuteCommand(ctx, cli.commandRunner, "terraform", "version", "-json")
 	if err != nil {
 		return "", err
 	}
@@ -161,7 +155,12 @@ func (cli *terraformCli) Init(ctx context.Context, modulePath string, additional
 	return cmdRes.Stdout, nil
 }
 
-func (cli *terraformCli) Plan(ctx context.Context, modulePath string, planFilePath string, additionalArgs ...string) (string, error) {
+func (cli *terraformCli) Plan(
+	ctx context.Context,
+	modulePath string,
+	planFilePath string,
+	additionalArgs ...string,
+) (string, error) {
 	args := []string{
 		fmt.Sprintf("-chdir=%s", modulePath),
 		"plan",
@@ -216,6 +215,22 @@ func (cli *terraformCli) Output(ctx context.Context, modulePath string, addition
 	return cmdRes.Stdout, nil
 }
 
+func (cli *terraformCli) Show(ctx context.Context, modulePath string, additionalArgs ...string) (string, error) {
+	args := []string{
+		fmt.Sprintf("-chdir=%s", modulePath), "show", "-json"}
+
+	args = append(args, additionalArgs...)
+	cmdRes, err := cli.runCommand(ctx, args...)
+	if err != nil {
+		return "", fmt.Errorf(
+			"failed running terraform output: %s (%w)",
+			cmdRes.Stderr,
+			err,
+		)
+	}
+	return cmdRes.Stdout, nil
+}
+
 func (cli *terraformCli) Destroy(ctx context.Context, modulePath string, additionalArgs ...string) (string, error) {
 	args := []string{
 		fmt.Sprintf("-chdir=%s", modulePath),
@@ -232,24 +247,4 @@ func (cli *terraformCli) Destroy(ctx context.Context, modulePath string, additio
 		)
 	}
 	return cmdRes.Stdout, nil
-}
-
-type contextKey string
-
-const (
-	terraformContextKey contextKey = "terraformcli"
-)
-
-func GetTerraformCli(ctx context.Context) TerraformCli {
-	cli, ok := ctx.Value(terraformContextKey).(TerraformCli)
-	if !ok {
-		newCommandRunner := exec.GetCommandRunner(ctx)
-		args := NewTerraformCliArgs{
-			commandRunner: newCommandRunner,
-		}
-
-		cli = NewTerraformCli(args)
-	}
-
-	return cli
 }

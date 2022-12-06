@@ -1,0 +1,4 @@
+os,centos
+osVersion,7
+isWsl,false
+terminal,bash

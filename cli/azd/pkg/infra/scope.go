@@ -6,6 +6,7 @@ package infra
 import (
 	"context"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
 	"github.com/azure/azure-dev/cli/azd/pkg/azure"
 	"github.com/azure/azure-dev/cli/azd/pkg/tools/azcli"
 )
@@ -18,11 +19,11 @@ type Scope interface {
 	// Gets the url to check deployment progress
 	DeploymentUrl() string
 	// Deploy a given template with a set of parameters.
-	Deploy(ctx context.Context, templatePath string, parametersPath string) error
+	Deploy(ctx context.Context, template *azure.ArmTemplate, parameters azure.ArmParameters) error
 	// GetDeployment fetches the result of the most recent deployment.
-	GetDeployment(ctx context.Context) (azcli.AzCliDeployment, error)
+	GetDeployment(ctx context.Context) (*armresources.DeploymentExtended, error)
 	// Gets the resource deployment operations for the current scope
-	GetResourceOperations(ctx context.Context) ([]azcli.AzCliResourceOperation, error)
+	GetResourceOperations(ctx context.Context) ([]*armresources.DeploymentOperation, error)
 }
 
 type ResourceGroupScope struct {
@@ -47,18 +48,18 @@ func (s *ResourceGroupScope) ResourceGroup() string {
 	return s.resourceGroup
 }
 
-func (s *ResourceGroupScope) Deploy(ctx context.Context, modulePath string, parametersPath string) error {
-	_, err := s.azCli.DeployToResourceGroup(ctx, s.subscriptionId, s.resourceGroup, s.name, modulePath, parametersPath)
+func (s *ResourceGroupScope) Deploy(ctx context.Context, template *azure.ArmTemplate, parameters azure.ArmParameters) error {
+	_, err := s.azCli.DeployToResourceGroup(ctx, s.subscriptionId, s.resourceGroup, s.name, template, parameters)
 	return err
 }
 
 // GetDeployment fetches the result of the most recent deployment.
-func (s *ResourceGroupScope) GetDeployment(ctx context.Context) (azcli.AzCliDeployment, error) {
+func (s *ResourceGroupScope) GetDeployment(ctx context.Context) (*armresources.DeploymentExtended, error) {
 	return s.azCli.GetResourceGroupDeployment(ctx, s.subscriptionId, s.resourceGroup, s.name)
 }
 
 // Gets the resource deployment operations for the current scope
-func (s *ResourceGroupScope) GetResourceOperations(ctx context.Context) ([]azcli.AzCliResourceOperation, error) {
+func (s *ResourceGroupScope) GetResourceOperations(ctx context.Context) ([]*armresources.DeploymentOperation, error) {
 	return s.azCli.ListResourceGroupDeploymentOperations(ctx, s.subscriptionId, s.resourceGroup, s.name)
 }
 
@@ -67,9 +68,11 @@ func (s *ResourceGroupScope) DeploymentUrl() string {
 	return azure.ResourceGroupDeploymentRID(s.subscriptionId, s.resourceGroup, s.name)
 }
 
-func NewResourceGroupScope(ctx context.Context, subscriptionId string, resourceGroup string, deploymentName string) Scope {
+func NewResourceGroupScope(
+	azCli azcli.AzCli, subscriptionId string, resourceGroup string, deploymentName string,
+) Scope {
 	return &ResourceGroupScope{
-		azCli:          azcli.GetAzCli(ctx),
+		azCli:          azCli,
 		name:           deploymentName,
 		subscriptionId: subscriptionId,
 		resourceGroup:  resourceGroup,
@@ -104,24 +107,26 @@ func (s *SubscriptionScope) Location() string {
 }
 
 // Deploy a given template with a set of parameters.
-func (s *SubscriptionScope) Deploy(ctx context.Context, bicepPath string, parametersPath string) error {
-	_, err := s.azCli.DeployToSubscription(ctx, s.subscriptionId, s.name, bicepPath, parametersPath, s.location)
+func (s *SubscriptionScope) Deploy(ctx context.Context, template *azure.ArmTemplate, parameters azure.ArmParameters) error {
+	_, err := s.azCli.DeployToSubscription(ctx, s.subscriptionId, s.name, template, parameters, s.location)
 	return err
 }
 
 // GetDeployment fetches the result of the most recent deployment.
-func (s *SubscriptionScope) GetDeployment(ctx context.Context) (azcli.AzCliDeployment, error) {
+func (s *SubscriptionScope) GetDeployment(ctx context.Context) (*armresources.DeploymentExtended, error) {
 	return s.azCli.GetSubscriptionDeployment(ctx, s.subscriptionId, s.name)
 }
 
 // Gets the resource deployment operations for the current scope
-func (s *SubscriptionScope) GetResourceOperations(ctx context.Context) ([]azcli.AzCliResourceOperation, error) {
+func (s *SubscriptionScope) GetResourceOperations(ctx context.Context) ([]*armresources.DeploymentOperation, error) {
 	return s.azCli.ListSubscriptionDeploymentOperations(ctx, s.subscriptionId, s.name)
 }
 
-func NewSubscriptionScope(ctx context.Context, location string, subscriptionId string, deploymentName string) Scope {
+func NewSubscriptionScope(
+	azCli azcli.AzCli, location string, subscriptionId string, deploymentName string,
+) Scope {
 	return &SubscriptionScope{
-		azCli:          azcli.GetAzCli(ctx),
+		azCli:          azCli,
 		name:           deploymentName,
 		subscriptionId: subscriptionId,
 		location:       location,

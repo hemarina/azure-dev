@@ -10,17 +10,19 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/azure/azure-dev/cli/azd/internal/telemetry"
 	"github.com/azure/azure-dev/cli/azd/pkg/environment"
-	"github.com/azure/azure-dev/cli/azd/pkg/infra"
+	"github.com/azure/azure-dev/cli/azd/pkg/exec"
 	"github.com/azure/azure-dev/cli/azd/pkg/infra/provisioning"
+	"github.com/azure/azure-dev/cli/azd/pkg/input"
 	"github.com/azure/azure-dev/cli/azd/pkg/tools"
+	"github.com/azure/azure-dev/cli/azd/pkg/tools/azcli"
 	"github.com/drone/envsubst"
 	"gopkg.in/yaml.v3"
 )
 
 // ProjectConfig is the top level object serialized into an azure.yaml file.
-// When changing project structure, make sure to update the JSON schema file for azure.yaml (<workspace root>/schemas/vN.M/azure.yaml.json).
+// When changing project structure, make sure to update the JSON schema file for azure.yaml (<workspace
+// root>/schemas/vN.M/azure.yaml.json).
 type ProjectConfig struct {
 	Name              string                    `yaml:"name"`
 	ResourceGroupName string                    `yaml:"resourceGroup,omitempty"`
@@ -28,8 +30,14 @@ type ProjectConfig struct {
 	Metadata          *ProjectMetadata          `yaml:"metadata,omitempty"`
 	Services          map[string]*ServiceConfig `yaml:",omitempty"`
 	Infra             provisioning.Options      `yaml:"infra"`
+	Pipeline          PipelineOptions           `yaml:"pipeline"`
 
 	handlers map[Event][]ProjectLifecycleEventHandlerFn
+}
+
+// options supported in azure.yaml
+type PipelineOptions struct {
+	Provider string `yaml:"provider"`
 }
 
 // Project lifecycle events
@@ -52,6 +60,8 @@ const (
 	Destroying Event = "destroying"
 	// Raised after project is destroyed
 	Destroyed Event = "destroyed"
+	// Raised after environment is updated
+	EnvironmentUpdated Event = "environment updated"
 )
 
 // Project lifecycle event arguments
@@ -83,7 +93,13 @@ func (p *ProjectConfig) HasService(name string) bool {
 
 // GetProject constructs a Project from the project configuration
 // This also performs project validation
-func (pc *ProjectConfig) GetProject(ctx *context.Context, env *environment.Environment) (*Project, error) {
+func (pc *ProjectConfig) GetProject(
+	ctx context.Context,
+	env *environment.Environment,
+	console input.Console,
+	azCli azcli.AzCli,
+	commandRunner exec.CommandRunner,
+) (*Project, error) {
 	serviceMap := map[string]*Service{}
 
 	project := Project{
@@ -93,37 +109,14 @@ func (pc *ProjectConfig) GetProject(ctx *context.Context, env *environment.Envir
 		Services: make([]*Service, 0),
 	}
 
-	// This sets the current template within the go context
-	// The context is then used when the AzCli is instantiated to set the correct user agent
-	if project.Metadata != nil && strings.TrimSpace(project.Metadata.Template) != "" {
-		*ctx = telemetry.ContextWithTemplate(*ctx, project.Metadata.Template)
+	resourceGroupName, err := GetResourceGroupName(ctx, azCli, pc, env)
+	if err != nil {
+		return nil, err
 	}
-
-	if pc.ResourceGroupName == "" {
-		// We won't have a ResourceGroupName yet if it hasn't been set in either azure.yaml or AZURE_RESOURCE_GROUP env var
-		// Let's try to find the right resource group for this environment
-		resourceManager := infra.NewAzureResourceManager(*ctx)
-		resourceGroupName, err := resourceManager.FindResourceGroupForEnvironment(*ctx, env)
-		if err != nil {
-			return nil, err
-		}
-		pc.ResourceGroupName = resourceGroupName
-	}
+	project.ResourceGroupName = resourceGroupName
 
 	for key, serviceConfig := range pc.Services {
-		// If the 'resourceName' was not overridden in the project yaml
-		// Retrieve the resource name from the provisioned resources if available
-		if strings.TrimSpace(serviceConfig.ResourceName) == "" {
-			resolvedResourceName, err := GetServiceResourceName(*ctx, pc.ResourceGroupName, serviceConfig.Name, env)
-			if err != nil {
-				return nil, fmt.Errorf("getting resource name: %w", err)
-			}
-
-			serviceConfig.ResourceName = resolvedResourceName
-		}
-
-		deploymentScope := environment.NewDeploymentScope(env.GetSubscriptionId(), pc.ResourceGroupName, serviceConfig.ResourceName)
-		service, err := serviceConfig.GetService(*ctx, &project, env, deploymentScope)
+		service, err := serviceConfig.GetService(ctx, &project, env, azCli, commandRunner, console)
 
 		if err != nil {
 			return nil, fmt.Errorf("creating service %s: %w", key, err)
@@ -239,15 +232,14 @@ func ParseProjectConfig(yamlContent string, env *environment.Environment) (*Proj
 	var projectFile ProjectConfig
 
 	if err = yaml.Unmarshal([]byte(file), &projectFile); err != nil {
-		return nil, fmt.Errorf("unable to parse azure.yaml file. Please check the format of the file, and also verify you have the latest version of the CLI: %w", err)
+		return nil, fmt.Errorf(
+			"unable to parse azure.yaml file. Please check the format of the file, "+
+				"and also verify you have the latest version of the CLI: %w",
+			err,
+		)
 	}
 
 	projectFile.handlers = make(map[Event][]ProjectLifecycleEventHandlerFn)
-
-	// If ResourceGroupName not set in azure.yaml, then look for it in the AZURE_RESOURCE_GROUP env var
-	if strings.TrimSpace(projectFile.ResourceGroupName) == "" {
-		projectFile.ResourceGroupName = environment.GetResourceGroupNameFromEnvVar(env)
-	}
 
 	for key, svc := range projectFile.Services {
 		svc.handlers = make(map[Event][]ServiceLifecycleEventHandlerFn)
@@ -268,10 +260,12 @@ func ParseProjectConfig(yamlContent string, env *environment.Environment) (*Proj
 	return &projectFile, nil
 }
 
-func (p *ProjectConfig) Initialize(ctx context.Context, env *environment.Environment) error {
+func (p *ProjectConfig) Initialize(
+	ctx context.Context, env *environment.Environment, commandRunner exec.CommandRunner,
+) error {
 	var allTools []tools.ExternalTool
 	for _, svc := range p.Services {
-		frameworkService, err := svc.GetFrameworkService(ctx, env)
+		frameworkService, err := svc.GetFrameworkService(ctx, env, commandRunner)
 		if err != nil {
 			return fmt.Errorf("getting framework services: %w", err)
 		}

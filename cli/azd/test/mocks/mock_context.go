@@ -3,40 +3,42 @@ package mocks
 import (
 	"context"
 
-	"github.com/azure/azure-dev/cli/azd/internal"
-	"github.com/azure/azure-dev/cli/azd/pkg/exec"
+	"github.com/azure/azure-dev/cli/azd/pkg/config"
 	"github.com/azure/azure-dev/cli/azd/pkg/httputil"
-	"github.com/azure/azure-dev/cli/azd/pkg/input"
+	mockconfig "github.com/azure/azure-dev/cli/azd/test/mocks/config"
 	mockconsole "github.com/azure/azure-dev/cli/azd/test/mocks/console"
 	mockexec "github.com/azure/azure-dev/cli/azd/test/mocks/exec"
 	mockhttp "github.com/azure/azure-dev/cli/azd/test/mocks/httputil"
 )
 
 type MockContext struct {
+	Credentials   *MockCredentials
 	Context       *context.Context
 	Console       *mockconsole.MockConsole
 	HttpClient    *mockhttp.MockHttpClient
 	CommandRunner *mockexec.MockCommandRunner
+	ConfigManager *mockconfig.MockConfigManager
 }
 
 func NewMockContext(ctx context.Context) *MockContext {
 	mockConsole := mockconsole.NewMockConsole()
 	commandRunner := mockexec.NewMockCommandRunner()
-	http := mockhttp.NewMockHttpUtil()
+	httpClient := mockhttp.NewMockHttpUtil()
+	credentials := MockCredentials{}
+	configManager := mockconfig.NewMockConfigManager()
 
 	mockexec.AddAzLoginMocks(commandRunner)
-	commandRunner.AddDefaultMocks()
 
-	ctx = internal.WithCommandOptions(ctx, internal.GlobalCommandOptions{})
-	ctx = input.WithConsole(ctx, mockConsole)
-	ctx = exec.WithCommandRunner(ctx, commandRunner)
-	ctx = httputil.WithHttpClient(ctx, http)
+	ctx = httputil.WithHttpClient(ctx, httpClient)
+	ctx = config.WithConfigManager(ctx, configManager)
 
 	mockContext := &MockContext{
+		Credentials:   &credentials,
 		Context:       &ctx,
 		Console:       mockConsole,
 		CommandRunner: commandRunner,
-		HttpClient:    http,
+		HttpClient:    httpClient,
+		ConfigManager: configManager,
 	}
 
 	return mockContext

@@ -6,8 +6,10 @@ package project
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/azure/azure-dev/cli/azd/pkg/environment/azdcontext"
+	"github.com/azure/azure-dev/cli/azd/pkg/infra"
 	"github.com/azure/azure-dev/cli/azd/pkg/tools"
 )
 
@@ -33,12 +35,22 @@ type ServiceTarget interface {
 	// target.
 	RequiredExternalTools() []tools.ExternalTool
 	// Deploy deploys the given deployment artifact to the target resource
-	Deploy(ctx context.Context, azdCtx *azdcontext.AzdContext, path string, progress chan<- string) (ServiceDeploymentResult, error)
+	Deploy(
+		ctx context.Context,
+		azdCtx *azdcontext.AzdContext,
+		path string,
+		progress chan<- string,
+	) (ServiceDeploymentResult, error)
 	// Endpoints gets the endpoints a service exposes.
 	Endpoints(ctx context.Context) ([]string, error)
 }
 
-func NewServiceDeploymentResult(relatedResourceId string, kind ServiceTargetKind, rawResult string, endpoints []string) ServiceDeploymentResult {
+func NewServiceDeploymentResult(
+	relatedResourceId string,
+	kind ServiceTargetKind,
+	rawResult string,
+	endpoints []string,
+) ServiceDeploymentResult {
 	returnValue := ServiceDeploymentResult{
 		TargetResourceId: relatedResourceId,
 		Kind:             kind,
@@ -56,6 +68,19 @@ func NewServiceDeploymentResult(relatedResourceId string, kind ServiceTargetKind
 	}
 
 	return returnValue
+}
+
+func resourceTypeMismatchError(
+	resourceName string,
+	resourceType string,
+	expectedResourceType infra.AzureResourceType,
+) error {
+	return fmt.Errorf(
+		"resource '%s' with type '%s' does not match expected resource type '%s'",
+		resourceName,
+		resourceType,
+		string(expectedResourceType),
+	)
 }
 
 var _ ServiceTarget = &appServiceTarget{}

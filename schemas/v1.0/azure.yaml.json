@@ -64,7 +64,7 @@
                     "resourceName": {
                         "type": "string",
                         "title": "Name of the Azure resource that implements the service",
-                        "description": "Optional. If not specified, the resource name will be constructed from current environment name concatenated with service name (<environment-name><resource-name>, for example 'prodapi')."
+                        "description": "By default, the CLI will discover the Azure resource with tag 'azd-service-name' set to the current service's name. When specified, the CLI will instead find the Azure resource with the matching resource name."
                     },
                     "project": {
                         "type": "string",
@@ -94,7 +94,8 @@
                             "py",
                             "python",
                             "js",
-                            "ts"
+                            "ts",
+                            "java"
                         ]
                     },
                     "module": {
@@ -104,8 +105,7 @@
                     },
                     "dist": {
                         "type": "string",
-                        "title": "Relative path to service deployment artifacts",
-                        "description": "The CLI will use files under this path to create the deployment artifact (ZIP file). If omitted, all files under service project directory will be included."
+                        "title": "Relative path to service deployment artifacts"
                     },
                     "docker": {
                         "type": "object",
@@ -128,25 +128,72 @@
                                 "type": "string",
                                 "title": "The platform target",
                                 "default": "amd64"
+                            },
+                            "tag": {
+                                "type": "string",
+                                "title": "The tag that will be applied to the built container image.",
+                                "description": ""
                             }
                         }
                     }
                 },
-                "if": {
-                    "not": {
+                "required": ["project"],
+                "allOf": [
+                    {
+                        "if": {
+                            "not": {
+                                "properties": {
+                                    "host": {
+                                        "const": "containerapp"
+                                    }
+                                }
+                            }
+                        },
+                        "then": {
+                            "properties": {
+                                "docker": false
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "properties": {
+                                "language": { "const": "java" }
+                            }
+                        },
+                        "then": {
+                            "properties": {
+                                "dist": {
+                                    "type": "string",
+                                    "description": "The CLI will use the JAR file in this directory to create the deployment artifact (ZIP file). If omitted, the CLI will detect the output directory based on the build system in-use."
+                                }
+                            }
+                        }
+                    },
+                    {
                         "properties": {
-                            "host": {
-                                "const": "containerapp"
+                            "dist": {
+                                "type": "string",
+                                "description": "The CLI will use files under this path to create the deployment artifact (ZIP file). If omitted, all files under service project directory will be included."
                             }
                         }
                     }
-                },
-                "then": {
-                    "properties": {
-                        "docker": false
-                    }
-                },
-                "required": ["project"]
+                ]
+            }
+        },
+        "pipeline": {
+            "type": "object",
+            "title": "Definition of continuous integration pipeline",
+            "properties": {
+                "provider":{
+                    "type": "string",
+                    "title": "Type of pipeline provider",
+                    "description": "Optional. The pipeline provider to be used for continuous integration. (Default: github)",
+                    "enum": [
+                        "github",
+                        "azdo"
+                    ]
+                }
             }
         }
     }

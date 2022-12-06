@@ -1,0 +1,6 @@
+{
+    "os": "ubuntu",
+    "osVersion": "20.04",
+    "isWsl": "false",
+    "terminal": "pwsh"
+}

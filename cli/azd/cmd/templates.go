@@ -6,15 +6,38 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 
+	"github.com/azure/azure-dev/cli/azd/cmd/actions"
 	"github.com/azure/azure-dev/cli/azd/internal"
-	"github.com/azure/azure-dev/cli/azd/pkg/commands"
-	"github.com/azure/azure-dev/cli/azd/pkg/environment/azdcontext"
 	"github.com/azure/azure-dev/cli/azd/pkg/output"
 	"github.com/azure/azure-dev/cli/azd/pkg/templates"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
+
+func templateNameCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	templateManager := templates.NewTemplateManager()
+	templateSet, err := templateManager.ListTemplates()
+
+	if err != nil {
+		cobra.CompError(fmt.Sprintf("Error listing templates: %s", err))
+		return []string{}, cobra.ShellCompDirectiveError
+	}
+
+	templateList := maps.Values(templateSet)
+	slices.SortFunc(templateList, func(a, b templates.Template) bool {
+		return a.Name < b.Name
+	})
+	templateNames := make([]string, len(templateList))
+	for i, v := range templateList {
+		templateNames[i] = v.Name
+	}
+	return templateNames, cobra.ShellCompDirectiveDefault
+}
 
 func templatesCmd(rootOptions *internal.GlobalCommandOptions) *cobra.Command {
 	root := &cobra.Command{
@@ -22,83 +45,112 @@ func templatesCmd(rootOptions *internal.GlobalCommandOptions) *cobra.Command {
 		Short: "Manage templates.",
 	}
 
-	root.AddCommand(output.AddOutputParam(
-		templatesListCmd(rootOptions),
-		[]output.Format{output.JsonFormat, output.TableFormat},
-		output.TableFormat,
-	))
-	root.AddCommand(output.AddOutputParam(
-		templatesShowCmd(rootOptions),
-		[]output.Format{output.JsonFormat, output.TableFormat},
-		output.TableFormat,
-	))
+	root.AddCommand(BuildCmd(rootOptions, templatesListCmdDesign, initTemplatesListAction, nil))
+	root.AddCommand(BuildCmd(rootOptions, templatesShowCmdDesign, initTemplatesShowAction, nil))
 	root.Flags().BoolP("help", "h", false, fmt.Sprintf("Gets help for %s.", root.Name()))
 
 	return root
 }
 
-func templatesListCmd(rootOptions *internal.GlobalCommandOptions) *cobra.Command {
-	action := commands.ActionFunc(func(ctx context.Context, cmd *cobra.Command, args []string, azdCtx *azdcontext.AzdContext) error {
-		templateManager := templates.NewTemplateManager()
-		templateSet, err := templateManager.ListTemplates()
+type templatesListFlags struct {
+	outputFormat string
+	global       *internal.GlobalCommandOptions
+}
 
-		if err != nil {
-			return err
-		}
+func (tl *templatesListFlags) Bind(local *pflag.FlagSet, global *internal.GlobalCommandOptions) {
+	output.AddOutputFlag(local, &tl.outputFormat, []output.Format{output.JsonFormat, output.TableFormat}, output.TableFormat)
+	tl.global = global
+}
 
-		templateList := make([]templates.Template, 0, len(templateSet))
-		for _, template := range templateSet {
-			templateList = append(templateList, template)
-		}
+func templatesListCmdDesign(global *internal.GlobalCommandOptions) (*cobra.Command, *templatesListFlags) {
+	cmd := &cobra.Command{
+		Use:     "list",
+		Short:   "List templates.",
+		Aliases: []string{"ls"},
+	}
 
-		return formatTemplates(ctx, cmd, templateList...)
+	flags := &templatesListFlags{}
+	flags.Bind(cmd.Flags(), global)
+
+	return cmd, flags
+}
+
+type templatesListAction struct {
+	flags           templatesListFlags
+	formatter       output.Formatter
+	writer          io.Writer
+	templateManager *templates.TemplateManager
+}
+
+func newTemplatesListAction(
+	flags templatesListFlags,
+	formatter output.Formatter,
+	writer io.Writer,
+	templateManager *templates.TemplateManager,
+) *templatesListAction {
+	return &templatesListAction{
+		flags:           flags,
+		formatter:       formatter,
+		writer:          writer,
+		templateManager: templateManager,
+	}
+}
+
+func (tl *templatesListAction) Run(ctx context.Context) (*actions.ActionResult, error) {
+	templateSet, err := tl.templateManager.ListTemplates()
+
+	if err != nil {
+		return nil, err
+	}
+
+	templateList := maps.Values(templateSet)
+	slices.SortFunc(templateList, func(a, b templates.Template) bool {
+		return a.Name < b.Name
 	})
 
-	cmd := commands.Build(
-		action,
-		rootOptions,
-		"list",
-		"List templates.",
-		&commands.BuildOptions{
-			Aliases: []string{"ls"},
-		},
-	)
-
-	return cmd
+	return nil, formatTemplates(ctx, tl.formatter, tl.writer, templateList...)
 }
 
-func templatesShowCmd(rootOptions *internal.GlobalCommandOptions) *cobra.Command {
-	action := commands.ActionFunc(
-		func(ctx context.Context, cmd *cobra.Command, args []string, azdCtx *azdcontext.AzdContext) error {
-			templateName := args[0]
-			templateManager := templates.NewTemplateManager()
-			matchingTemplate, err := templateManager.GetTemplate(templateName)
+type templatesShowAction actions.Action
 
-			log.Printf("Template Name: %s\n", templateName)
+func newTemplatesShowAction(
+	formatter output.Formatter,
+	writer io.Writer,
+	templateManager *templates.TemplateManager,
+	args []string,
+) templatesShowAction {
+	return actions.ActionFunc(func(ctx context.Context) (*actions.ActionResult, error) {
+		templateName := args[0]
+		matchingTemplate, err := templateManager.GetTemplate(templateName)
 
-			if err != nil {
-				return err
-			}
+		log.Printf("Template Name: %s\n", templateName)
 
-			return formatTemplates(ctx, cmd, matchingTemplate)
-		},
-	)
-	cmd := commands.Build(
-		action,
-		rootOptions,
-		"show <template>",
-		"Show the template details.",
-		nil,
-	)
+		if err != nil {
+			return nil, err
+		}
+
+		return nil, formatTemplates(ctx, formatter, writer, matchingTemplate)
+	})
+}
+
+func templatesShowCmdDesign(rootOptions *internal.GlobalCommandOptions) (*cobra.Command, *struct{}) {
+	cmd := &cobra.Command{
+		Use:   "show <template>",
+		Short: "Show the template details.",
+	}
+	output.AddOutputParam(cmd, []output.Format{output.JsonFormat, output.TableFormat}, output.TableFormat)
+
 	cmd.Args = cobra.ExactArgs(1)
-	return cmd
+	return cmd, &struct{}{}
 }
 
-func formatTemplates(ctx context.Context, cmd *cobra.Command, templates ...templates.Template) error {
+func formatTemplates(
+	ctx context.Context,
+	formatter output.Formatter,
+	writer io.Writer,
+	templates ...templates.Template,
+) error {
 	var err error
-	formatter := output.GetFormatter(ctx)
-	writer := output.GetWriter(ctx)
-
 	if formatter.Kind() == output.TableFormat {
 		columns := []output.Column{
 			{

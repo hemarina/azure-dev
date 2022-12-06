@@ -21,36 +21,20 @@ type CommandRunner interface {
 }
 
 // Creates a new default instance of the CommandRunner
-func NewCommandRunner() CommandRunner {
-	return &commandRunner{}
-}
-
-type contextKey string
-
-const (
-	execFnContextKey contextKey = "commandrunner"
-)
-
-// Gets the exec util implementation used for executing CLI commands on the host machine
-// This override should ONLY be called during unit testing, otherwise the default implementation is used.
-func WithCommandRunner(ctx context.Context, commandRunner CommandRunner) context.Context {
-	return context.WithValue(ctx, execFnContextKey, commandRunner)
-}
-
-// Gets the exec util implementation used for executing cLI commands on the host machine
-// If a value is not found in the context the default implementation will be used.
-func GetCommandRunner(ctx context.Context) CommandRunner {
-	execFn, ok := ctx.Value(execFnContextKey).(CommandRunner)
-	if !ok {
-		return NewCommandRunner()
+func NewCommandRunner(stdin io.Reader, stdout io.Writer, stderr io.Writer) CommandRunner {
+	return &commandRunner{
+		stdin:  stdin,
+		stdout: stdout,
+		stderr: stderr,
 	}
-
-	return execFn
 }
 
 // commandRunner is the default private implementation of the CommandRunner interface
 // This implementation executes actual commands on the underlying console/shell
 type commandRunner struct {
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
 }
 
 // Run runs the command specified in 'args'.
@@ -125,7 +109,11 @@ func (r *commandRunner) Run(ctx context.Context, args RunArgs) (RunResult, error
 		}
 	} else {
 		if args.Debug {
-			log.Printf("Exit Code:%d\nOut:%s\nErr:%s\n", cmd.ProcessState.ExitCode(), redactSensitiveData(stdout.String()), redactSensitiveData(stderr.String()))
+			log.Printf(
+				"Exit Code:%d\nOut:%s\nErr:%s\n",
+				cmd.ProcessState.ExitCode(),
+				redactSensitiveData(stdout.String()),
+				redactSensitiveData(stderr.String()))
 		}
 
 		result = RunResult{

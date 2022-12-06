@@ -11,9 +11,10 @@ import (
 	"github.com/azure/azure-dev/cli/azd/pkg/environment"
 	"github.com/azure/azure-dev/cli/azd/pkg/infra"
 	. "github.com/azure/azure-dev/cli/azd/pkg/infra/provisioning"
-	"github.com/azure/azure-dev/cli/azd/pkg/infra/provisioning/test"
+	_ "github.com/azure/azure-dev/cli/azd/pkg/infra/provisioning/test"
 	"github.com/azure/azure-dev/cli/azd/pkg/input"
 	"github.com/azure/azure-dev/cli/azd/test/mocks"
+	"github.com/azure/azure-dev/cli/azd/test/mocks/mockazcli"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,8 +26,10 @@ func TestManagerPlan(t *testing.T) {
 	interactive := false
 
 	mockContext := mocks.NewMockContext(context.Background())
-	test.RegisterTestProvider()
-	mgr, _ := NewManager(*mockContext.Context, env, "", options, interactive)
+	azCli := mockazcli.NewAzCliFromMockContext(mockContext)
+	mgr, _ := NewManager(
+		*mockContext.Context, env, "", options, interactive, azCli, mockContext.Console, mockContext.CommandRunner,
+	)
 
 	deploymentPlan, err := mgr.Plan(*mockContext.Context)
 
@@ -35,7 +38,7 @@ func TestManagerPlan(t *testing.T) {
 	require.Equal(t, deploymentPlan.Deployment.Parameters["location"].Value, env.Values["AZURE_LOCATION"])
 }
 
-func TestManagerGetDeployment(t *testing.T) {
+func TestManagerGetState(t *testing.T) {
 	env := environment.EphemeralWithValues("test-env", map[string]string{
 		"AZURE_LOCATION": "eastus2",
 	})
@@ -43,11 +46,18 @@ func TestManagerGetDeployment(t *testing.T) {
 	interactive := false
 
 	mockContext := mocks.NewMockContext(context.Background())
-	test.RegisterTestProvider()
-	mgr, _ := NewManager(*mockContext.Context, env, "", options, interactive)
+	azCli := mockazcli.NewAzCliFromMockContext(mockContext)
+	mgr, _ := NewManager(
+		*mockContext.Context, env, "", options, interactive, azCli, mockContext.Console, mockContext.CommandRunner,
+	)
 
-	provisioningScope := infra.NewSubscriptionScope(*mockContext.Context, "eastus2", env.GetSubscriptionId(), env.GetEnvName())
-	getResult, err := mgr.GetDeployment(*mockContext.Context, provisioningScope)
+	provisioningScope := infra.NewSubscriptionScope(
+		azCli,
+		"eastus2",
+		env.GetSubscriptionId(),
+		env.GetEnvName(),
+	)
+	getResult, err := mgr.State(*mockContext.Context, provisioningScope)
 
 	require.NotNil(t, getResult)
 	require.Nil(t, err)
@@ -61,11 +71,18 @@ func TestManagerDeploy(t *testing.T) {
 	interactive := false
 
 	mockContext := mocks.NewMockContext(context.Background())
-	test.RegisterTestProvider()
-	mgr, _ := NewManager(*mockContext.Context, env, "", options, interactive)
+	azCli := mockazcli.NewAzCliFromMockContext(mockContext)
+	mgr, _ := NewManager(
+		*mockContext.Context, env, "", options, interactive, azCli, mockContext.Console, mockContext.CommandRunner,
+	)
 
 	deploymentPlan, _ := mgr.Plan(*mockContext.Context)
-	provisioningScope := infra.NewSubscriptionScope(*mockContext.Context, "eastus2", env.GetSubscriptionId(), env.GetEnvName())
+	provisioningScope := infra.NewSubscriptionScope(
+		azCli,
+		"eastus2",
+		env.GetSubscriptionId(),
+		env.GetEnvName(),
+	)
 	deployResult, err := mgr.Deploy(*mockContext.Context, deploymentPlan, provisioningScope)
 
 	require.NotNil(t, deployResult)
@@ -80,12 +97,15 @@ func TestManagerDestroyWithPositiveConfirmation(t *testing.T) {
 	interactive := false
 
 	mockContext := mocks.NewMockContext(context.Background())
+	azCli := mockazcli.NewAzCliFromMockContext(mockContext)
+
 	mockContext.Console.WhenConfirm(func(options input.ConsoleOptions) bool {
 		return strings.Contains(options.Message, "Are you sure you want to destroy?")
 	}).Respond(true)
 
-	test.RegisterTestProvider()
-	mgr, _ := NewManager(*mockContext.Context, env, "", options, interactive)
+	mgr, _ := NewManager(
+		*mockContext.Context, env, "", options, interactive, azCli, mockContext.Console, mockContext.CommandRunner,
+	)
 
 	deploymentPlan, _ := mgr.Plan(*mockContext.Context)
 	destroyOptions := NewDestroyOptions(false, false)
@@ -104,12 +124,15 @@ func TestManagerDestroyWithNegativeConfirmation(t *testing.T) {
 	interactive := false
 
 	mockContext := mocks.NewMockContext(context.Background())
+	azCli := mockazcli.NewAzCliFromMockContext(mockContext)
+
 	mockContext.Console.WhenConfirm(func(options input.ConsoleOptions) bool {
 		return strings.Contains(options.Message, "Are you sure you want to destroy?")
 	}).Respond(false)
 
-	test.RegisterTestProvider()
-	mgr, _ := NewManager(*mockContext.Context, env, "", options, interactive)
+	mgr, _ := NewManager(
+		*mockContext.Context, env, "", options, interactive, azCli, mockContext.Console, mockContext.CommandRunner,
+	)
 
 	deploymentPlan, _ := mgr.Plan(*mockContext.Context)
 	destroyOptions := NewDestroyOptions(false, false)

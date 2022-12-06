@@ -9,14 +9,15 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/azure/azure-dev/cli/azd/pkg/contracts"
 	"github.com/azure/azure-dev/cli/azd/pkg/environment"
 	"github.com/azure/azure-dev/cli/azd/pkg/osutil"
 	"github.com/drone/envsubst"
 )
 
-func UpdateEnvironment(env *environment.Environment, outputs *map[string]OutputParameter) error {
-	if len(*outputs) > 0 {
-		for key, param := range *outputs {
+func UpdateEnvironment(env *environment.Environment, outputs map[string]OutputParameter) error {
+	if len(outputs) > 0 {
+		for key, param := range outputs {
 			env.Values[key] = fmt.Sprintf("%v", param.Value)
 		}
 
@@ -28,7 +29,8 @@ func UpdateEnvironment(env *environment.Environment, outputs *map[string]OutputP
 	return nil
 }
 
-// Copies the an input parameters file templateFilePath to inputFilePath after replacing environment variable references in the contents```
+// Copies the an input parameters file templateFilePath to inputFilePath after replacing environment variable references in
+// the contents```
 func CreateInputParametersFile(templateFilePath string, inputFilePath string, envValues map[string]string) error {
 	// Copy the parameter template file to the environment working directory and do substitutions.
 	log.Printf("Reading parameters template file from: %s", templateFilePath)
@@ -59,4 +61,45 @@ func CreateInputParametersFile(templateFilePath string, inputFilePath string, en
 	}
 
 	return nil
+}
+
+// NewEnvRefreshResultFromState creates a EnvRefreshResult from a provisioning state object,
+// applying the required translations.
+func NewEnvRefreshResultFromState(state *State) contracts.EnvRefreshResult {
+	result := contracts.EnvRefreshResult{}
+
+	result.Outputs = make(map[string]contracts.EnvRefreshOutputParameter, len(state.Outputs))
+	result.Resources = make([]contracts.EnvRefreshResource, len(state.Resources))
+
+	mapType := func(p ParameterType) contracts.EnvRefreshOutputType {
+		switch p {
+		case ParameterTypeString:
+			return contracts.EnvRefreshOutputTypeString
+		case ParameterTypeBoolean:
+			return contracts.EnvRefreshOutputTypeBoolean
+		case ParameterTypeNumber:
+			return contracts.EnvRefreshOutputTypeNumber
+		case ParameterTypeObject:
+			return contracts.EnvRefreshOutputTypeObject
+		case ParameterTypeArray:
+			return contracts.EnvRefreshOutputTypeArray
+		default:
+			panic(fmt.Sprintf("unknown provisioning.ParameterType value: %v", p))
+		}
+	}
+
+	for k, v := range state.Outputs {
+		result.Outputs[k] = contracts.EnvRefreshOutputParameter{
+			Type:  mapType(v.Type),
+			Value: v.Value,
+		}
+	}
+
+	for idx, res := range state.Resources {
+		result.Resources[idx] = contracts.EnvRefreshResource{
+			Id: res.Id,
+		}
+	}
+
+	return result
 }

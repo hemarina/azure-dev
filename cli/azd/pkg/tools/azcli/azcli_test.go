@@ -4,162 +4,157 @@
 package azcli
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"io"
-	"regexp"
-	"strings"
+	"errors"
+	"net/http"
 	"testing"
 
-	"github.com/azure/azure-dev/cli/azd/internal"
-	"github.com/azure/azure-dev/cli/azd/pkg/exec"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
+	"github.com/azure/azure-dev/cli/azd/pkg/convert"
 	"github.com/azure/azure-dev/cli/azd/test/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestAzCli(t *testing.T) {
-	t.Run("DebugAndTelemetryEnabled", func(t *testing.T) {
-		mockContext := mocks.NewMockContext(context.Background())
-
-		tempCli := NewAzCli(NewAzCliArgs{
-			EnableDebug:     true,
-			EnableTelemetry: true,
-			CommandRunner:   mockContext.CommandRunner,
-		})
-
-		*mockContext.Context = WithAzCli(*mockContext.Context, tempCli)
-		tempCli = GetAzCli(*mockContext.Context)
-		cli := tempCli.(*azCli)
-
-		require.True(t, cli.enableDebug)
-		require.True(t, cli.enableTelemetry)
-
-		var env []string
-		var commandArgs []string
-
-		mockContext.CommandRunner.When(func(args exec.RunArgs, command string) bool {
-			return strings.Contains(command, "az hello")
-		}).RespondFn(func(args exec.RunArgs) (exec.RunResult, error) {
-			env = args.Env
-			commandArgs = args.Args
-			return exec.RunResult{}, nil
-		})
-
-		_, err := cli.runAzCommand(*mockContext.Context, "hello")
-		require.NoError(t, err)
-
-		require.Equal(t, []string{
-			fmt.Sprintf("AZURE_HTTP_USER_AGENT=%s", internal.MakeUserAgentString("")),
-		}, env)
-
-		require.Equal(t, []string{"hello", "--debug"}, commandArgs)
-	})
-
-	t.Run("DebugAndTelemetryDisabled", func(t *testing.T) {
-		mockContext := mocks.NewMockContext(context.Background())
-
-		tempCli := NewAzCli(NewAzCliArgs{
-			EnableDebug:     false,
-			EnableTelemetry: false,
-			CommandRunner:   mockContext.CommandRunner,
-		})
-
-		*mockContext.Context = WithAzCli(*mockContext.Context, tempCli)
-		tempCli = GetAzCli(*mockContext.Context)
-		cli := tempCli.(*azCli)
-
-		require.False(t, cli.enableDebug)
-		require.False(t, cli.enableTelemetry)
-
-		var env []string
-		var commandArgs []string
-
-		mockContext.CommandRunner.When(func(args exec.RunArgs, command string) bool {
-			return strings.Contains(command, "az hello")
-		}).RespondFn(func(args exec.RunArgs) (exec.RunResult, error) {
-			env = args.Env
-			commandArgs = args.Args
-			return exec.RunResult{}, nil
-		})
-
-		_, err := cli.runAzCommand(*mockContext.Context, "hello")
-		require.NoError(t, err)
-
-		require.Equal(t, []string{
-			fmt.Sprintf("AZURE_HTTP_USER_AGENT=%s", internal.MakeUserAgentString("")),
-			"AZURE_CORE_COLLECT_TELEMETRY=no",
-		}, env)
-
-		require.Equal(t, []string{"hello"}, commandArgs)
-	})
-}
-
 func TestAZCLIWithUserAgent(t *testing.T) {
-	azCli := NewAzCli(NewAzCliArgs{
-		EnableTelemetry: true,
-		EnableDebug:     true,
-	})
-
-	account := mustGetDefaultAccount(t, azCli)
-	userAgent := runAndCaptureUserAgent(t, account.Id)
-
-	require.Contains(t, userAgent, "AZTesting=yes")
-	require.Contains(t, userAgent, "azdev")
-}
-
-func mustGetDefaultAccount(t *testing.T, azCli AzCli) AzCliSubscriptionInfo {
-	accounts, err := azCli.ListAccounts(context.Background())
-	require.NoError(t, err)
-	for _, account := range accounts {
-		if account.IsDefault {
-			return account
-		}
-	}
-	assert.Fail(t, "No default account set")
-	return AzCliSubscriptionInfo{}
-}
-
-func runAndCaptureUserAgent(t *testing.T, subscriptionID string) string {
-	// Get the default command runner implementation
-	defaultRunner := exec.NewCommandRunner()
 	mockContext := mocks.NewMockContext(context.Background())
-
-	azCli := NewAzCli(NewAzCliArgs{
-		EnableDebug:     true,
-		EnableTelemetry: true,
-		CommandRunner:   mockContext.CommandRunner,
-	})
-	azCli.SetUserAgent(internal.MakeUserAgentString("AZTesting=yes"))
-
-	stderrBuffer := &bytes.Buffer{}
-
-	// Mock the command runner
-	mockContext.CommandRunner.When(func(args exec.RunArgs, command string) bool {
-		return true
-	}).RespondFn(func(args exec.RunArgs) (exec.RunResult, error) {
-		if args.Stderr != nil {
-			args.Stderr = io.MultiWriter(stderrBuffer, args.Stderr)
-		} else {
-			args.Stderr = stderrBuffer
+	mockContext.HttpClient.When(func(request *http.Request) bool {
+		return request.Method == http.MethodGet && request.URL.Path == "/RESOURCE_ID"
+	}).RespondFn(func(request *http.Request) (*http.Response, error) {
+		response := armresources.ClientGetByIDResponse{
+			GenericResource: armresources.GenericResource{
+				ID:       convert.RefOf("RESOURCE_ID"),
+				Kind:     convert.RefOf("RESOURCE_KIND"),
+				Name:     convert.RefOf("RESOURCE_NAME"),
+				Type:     convert.RefOf("RESOURCE_TYPE"),
+				Location: convert.RefOf("RESOURCE_LOCATION"),
+			},
 		}
 
-		// Invoke the real command runner
-		rr, err := defaultRunner.Run(*mockContext.Context, args)
-		return rr, err
+		return mocks.CreateHttpResponseWithBody(request, http.StatusOK, response)
 	})
 
-	// the result doesn't matter here since we just want to see what the User-Agent is that we sent, which will
-	// happen regardless of whether the request succeeds or fails.
-	_, _ = azCli.ListResourceGroupResources(context.Background(), subscriptionID, "ResourceGroupThatDoesNotExist", nil)
+	var rawResponse *http.Response
+	ctx := runtime.WithCaptureResponse(*mockContext.Context, &rawResponse)
 
-	// The outputted line will look like this:
-	// DEBUG: cli.azure.cli.core.sdk.policies:     'User-Agent': 'AZURECLI/2.35.0 (MSI) azsdk-python-azure-mgmt-resource/20.0.0 Python/3.10.3 (Windows-10-10.0.22621-SP0) azdev/0.0.0-dev.0 AZTesting=yes'
-	re := regexp.MustCompile(`'User-Agent':\s+'([^']+)'`)
+	azCli := newAzCliFromMockContext(mockContext)
+	// We don't care about the actual response or if an error occurred
+	// Any API call that leverages the Go SDK is fine
+	_, _ = azCli.GetResource(ctx, "SUBSCRIPTION_ID", "RESOURCE_ID")
 
-	matches := re.FindAllStringSubmatch(stderrBuffer.String(), -1)
-	require.NotNil(t, matches)
+	userAgent, ok := rawResponse.Request.Header["User-Agent"]
+	if !ok {
+		require.Fail(t, "missing User-Agent header")
+	}
 
-	return matches[0][1]
+	require.Contains(t, userAgent[0], "azsdk-go")
+	require.Contains(t, userAgent[0], "azdev")
+}
+
+func TestAZCliGetAccessTokenTranslatesErrors(t *testing.T) {
+	//nolint:lll
+	tests := []struct {
+		name   string
+		stderr string
+		expect error
+	}{
+		{
+			name:   "AADSTS70043",
+			stderr: "AADSTS70043: The refresh token has expired or is invalid due to sign-in frequency checks by conditional access. The token was issued on {issueDate} and the maximum allowed lifetime for this request is {time}.",
+			expect: ErrAzCliRefreshTokenExpired,
+		},
+		{
+			name:   "AADSTS700082",
+			stderr: "AADSTS700082: The refresh token has expired due to inactivity. The token was issued on {issueDate} and was inactive for {time}.",
+			expect: ErrAzCliRefreshTokenExpired,
+		},
+		{
+			name:   "GetAccessTokenDoubleQuotes",
+			stderr: `Please run "az login" to setup account.`,
+			expect: ErrAzCliNotLoggedIn,
+		},
+		{
+			name:   "GetAccessTokenSingleQuotes",
+			stderr: `Please run 'az login' to setup account.`,
+			expect: ErrAzCliNotLoggedIn,
+		},
+		{
+			name:   "GetAccessTokenDoubleQuotesAccessAccount",
+			stderr: `Please run "az login" to access your accounts.`,
+			expect: ErrAzCliNotLoggedIn,
+		},
+		{
+			name:   "GetAccessTokenSingleQuotesAccessAccount",
+			stderr: `Please run 'az login' to access your accounts.`,
+			expect: ErrAzCliNotLoggedIn,
+		},
+		{
+			name:   "GetAccessTokenErrorNoSubscriptionFound",
+			stderr: `ERROR: No subscription found`,
+			expect: ErrAzCliNotLoggedIn,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mockContext := mocks.NewMockContext(context.Background())
+			mockCredential := mocks.MockCredentials{
+				GetTokenFn: func(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
+					return azcore.AccessToken{}, errors.New(test.stderr)
+				},
+			}
+
+			azCli := NewAzCli(&mockCredential, NewAzCliArgs{
+				EnableDebug:     true,
+				EnableTelemetry: true,
+			})
+
+			_, err := azCli.GetAccessToken(*mockContext.Context)
+			assert.True(t, errors.Is(err, test.expect))
+		})
+	}
+}
+
+func Test_AzSdk_User_Agent_Policy(t *testing.T) {
+	mockContext := mocks.NewMockContext(context.Background())
+	mockContext.HttpClient.When(func(request *http.Request) bool {
+		return request.Method == http.MethodGet && request.URL.Path == "/RESOURCE_ID"
+	}).RespondFn(func(request *http.Request) (*http.Response, error) {
+		response := armresources.ClientGetByIDResponse{
+			GenericResource: armresources.GenericResource{
+				ID:       convert.RefOf("RESOURCE_ID"),
+				Kind:     convert.RefOf("RESOURCE_KIND"),
+				Name:     convert.RefOf("RESOURCE_NAME"),
+				Type:     convert.RefOf("RESOURCE_TYPE"),
+				Location: convert.RefOf("RESOURCE_LOCATION"),
+			},
+		}
+
+		return mocks.CreateHttpResponseWithBody(request, http.StatusOK, response)
+	})
+
+	var rawResponse *http.Response
+	ctx := runtime.WithCaptureResponse(*mockContext.Context, &rawResponse)
+
+	azCli := newAzCliFromMockContext(mockContext)
+	// We don't care about the actual response or if an error occurred
+	// Any API call that leverages the Go SDK is fine
+	_, _ = azCli.GetResource(ctx, "SUBSCRIPTION_ID", "RESOURCE_ID")
+
+	userAgent, ok := rawResponse.Request.Header["User-Agent"]
+	if !ok {
+		require.Fail(t, "missing User-Agent header")
+	}
+
+	require.Contains(t, userAgent[0], "azsdk-go")
+	require.Contains(t, userAgent[0], "azdev")
+}
+
+func newAzCliFromMockContext(mockContext *mocks.MockContext) AzCli {
+	return NewAzCli(mockContext.Credentials, NewAzCliArgs{
+		HttpClient: mockContext.HttpClient,
+	})
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/azure/azure-dev/cli/azd/pkg/environment"
 	"github.com/azure/azure-dev/cli/azd/pkg/environment/azdcontext"
 	"github.com/azure/azure-dev/cli/azd/pkg/tools"
-	"github.com/azure/azure-dev/cli/azd/pkg/tools/azcli"
 )
 
 type Service struct {
@@ -23,8 +22,8 @@ type Service struct {
 	Framework FrameworkService
 	// The application target service used to deploy the service to azure
 	Target ServiceTarget
-	// The deployment scope of the service, ex) subscriptionId, resource group name & resource name
-	Scope *environment.DeploymentScope
+	// The target resource of the service, ex) subscriptionId, resource group name & resource name
+	TargetResource *environment.TargetResource
 }
 
 type ServiceDeploymentChannelResponse struct {
@@ -42,7 +41,10 @@ func (svc *Service) RequiredExternalTools() []tools.ExternalTool {
 	return requiredTools
 }
 
-func (svc *Service) Deploy(ctx context.Context, azdCtx *azdcontext.AzdContext) (<-chan *ServiceDeploymentChannelResponse, <-chan string) {
+func (svc *Service) Deploy(
+	ctx context.Context,
+	azdCtx *azdcontext.AzdContext,
+) (<-chan *ServiceDeploymentChannelResponse, <-chan string) {
 	result := make(chan *ServiceDeploymentChannelResponse, 1)
 	progress := make(chan string)
 
@@ -83,25 +85,4 @@ func (svc *Service) Deploy(ctx context.Context, azdCtx *azdcontext.AzdContext) (
 	}()
 
 	return result, progress
-}
-
-// GetServiceResourceName attempts to find the name of the azure resource with the 'azd-service-name' tag set to the service key.
-func GetServiceResourceName(ctx context.Context, resourceGroupName string, serviceName string, env *environment.Environment) (string, error) {
-	azCli := azcli.GetAzCli(ctx)
-	query := fmt.Sprintf("[?tags.\"azd-service-name\" =='%s']", serviceName)
-
-	res, err := azCli.ListResourceGroupResources(ctx, env.GetSubscriptionId(), resourceGroupName, &azcli.ListResourceGroupResourcesOptions{
-		JmesPathQuery: &query,
-	})
-
-	if err != nil {
-		return "", err
-	}
-
-	if len(res) != 1 {
-		log.Printf("Expecting only '1' resource match to override resource name but found '%d'", len(res))
-		return fmt.Sprintf("%s%s", env.GetEnvName(), serviceName), nil
-	}
-
-	return res[0].Name, nil
 }

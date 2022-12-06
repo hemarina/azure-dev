@@ -1,11 +1,8 @@
-package httpUtil
+package httputil
 
 import (
 	"fmt"
 	"net/http"
-	"strings"
-
-	"github.com/azure/azure-dev/cli/azd/pkg/httputil"
 )
 
 type MockHttpClient struct {
@@ -15,13 +12,13 @@ type MockHttpClient struct {
 type HttpExpression struct {
 	http        *MockHttpClient
 	predicateFn RequestPredicate
-	response    httputil.HttpResponseMessage
+	response    *http.Response
 	responseFn  RespondFn
 	error       error
 }
 
-type RequestPredicate func(request *httputil.HttpRequestMessage) bool
-type RespondFn func(request httputil.HttpRequestMessage) (*httputil.HttpResponseMessage, error)
+type RequestPredicate func(request *http.Request) bool
+type RespondFn func(request *http.Request) (*http.Response, error)
 
 func NewMockHttpUtil() *MockHttpClient {
 	return &MockHttpClient{
@@ -29,43 +26,43 @@ func NewMockHttpUtil() *MockHttpClient {
 	}
 }
 
-func (http *MockHttpClient) Send(req *httputil.HttpRequestMessage) (*httputil.HttpResponseMessage, error) {
+func (c *MockHttpClient) Do(req *http.Request) (*http.Response, error) {
 	var match *HttpExpression
 
-	for i := len(http.expressions) - 1; i >= 0; i-- {
-		if http.expressions[i].predicateFn(req) {
-			match = http.expressions[i]
+	for i := len(c.expressions) - 1; i >= 0; i-- {
+		if c.expressions[i].predicateFn(req) {
+			match = c.expressions[i]
 			break
 		}
 	}
 
 	if match == nil {
-		panic(fmt.Sprintf("No mock found for request: '%s %s'", req.Method, req.Url))
+		panic(fmt.Sprintf("No mock found for request: '%s %s'", req.Method, req.URL))
 	}
 
 	// If the response function has been set, return the value
 	if match.responseFn != nil {
-		return match.responseFn(*req)
+		return match.responseFn(req)
 	}
 
-	return &match.response, match.error
+	return match.response, match.error
 }
 
-func (http *MockHttpClient) When(predicate RequestPredicate) *HttpExpression {
+func (c *MockHttpClient) When(predicate RequestPredicate) *HttpExpression {
 	expr := HttpExpression{
-		http:        http,
+		http:        c,
 		predicateFn: predicate,
 	}
 
-	http.expressions = append(http.expressions, &expr)
+	c.expressions = append(c.expressions, &expr)
 	return &expr
 }
 
-func (http *MockHttpClient) Reset() {
-	http.expressions = []*HttpExpression{}
+func (c *MockHttpClient) Reset() {
+	c.expressions = []*HttpExpression{}
 }
 
-func (e *HttpExpression) Respond(response httputil.HttpResponseMessage) *MockHttpClient {
+func (e *HttpExpression) Respond(response *http.Response) *MockHttpClient {
 	e.response = response
 	return e.http
 }
@@ -78,19 +75,4 @@ func (e *HttpExpression) RespondFn(responseFn RespondFn) *MockHttpClient {
 func (e *HttpExpression) SetError(err error) *MockHttpClient {
 	e.error = err
 	return e.http
-}
-
-func MockResourceGraphEmptyResources(mock *MockHttpClient) {
-	mock.When(func(req *httputil.HttpRequestMessage) bool {
-		return req.Method == http.MethodPost && strings.Contains(req.Url, "providers/Microsoft.ResourceGraph/resources")
-	}).RespondFn(func(request httputil.HttpRequestMessage) (*httputil.HttpResponseMessage, error) {
-		jsonResponse := `{"data": [], "total_records": 0}`
-
-		response := httputil.HttpResponseMessage{
-			Status: 200,
-			Body:   []byte(jsonResponse),
-		}
-
-		return &response, nil
-	})
 }

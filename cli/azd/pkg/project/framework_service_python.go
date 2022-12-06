@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/azure/azure-dev/cli/azd/pkg/environment"
+	"github.com/azure/azure-dev/cli/azd/pkg/exec"
 	"github.com/azure/azure-dev/cli/azd/pkg/tools"
 	"github.com/azure/azure-dev/cli/azd/pkg/tools/python"
 	"github.com/otiai10/copy"
@@ -40,7 +41,11 @@ func (pp *pythonProject) Package(_ context.Context, progress chan<- string) (str
 	}
 
 	progress <- "Copying deployment package"
-	if err := copy.Copy(publishSource, publishRoot, skipPatterns(filepath.Join(publishSource, "__pycache__"), filepath.Join(publishSource, ".azure"))); err != nil {
+	if err := copy.Copy(
+		publishSource,
+		publishRoot,
+		skipPatterns(
+			filepath.Join(publishSource, "__pycache__"), filepath.Join(publishSource, ".azure"))); err != nil {
 		return "", fmt.Errorf("publishing for %s: %w", pp.config.Name, err)
 	}
 
@@ -56,7 +61,11 @@ func (pp *pythonProject) InstallDependencies(ctx context.Context) error {
 		if os.IsNotExist(err) {
 			err = pp.cli.CreateVirtualEnv(ctx, pp.config.Path(), vEnvName)
 			if err != nil {
-				return fmt.Errorf("python virtual environment for project '%s' could not be created: %w", pp.config.Path(), err)
+				return fmt.Errorf(
+					"python virtual environment for project '%s' could not be created: %w",
+					pp.config.Path(),
+					err,
+				)
 			}
 		} else {
 			return fmt.Errorf("python virtual environment for project '%s' is not accessible: %w", pp.config.Path(), err)
@@ -108,10 +117,12 @@ func skipPatterns(patterns ...string) copy.Options {
 	}
 }
 
-func NewPythonProject(ctx context.Context, config *ServiceConfig, env *environment.Environment) FrameworkService {
+func NewPythonProject(
+	commandRunner exec.CommandRunner, config *ServiceConfig, env *environment.Environment,
+) FrameworkService {
 	return &pythonProject{
 		config: config,
 		env:    env,
-		cli:    python.NewPythonCli(ctx),
+		cli:    python.NewPythonCli(commandRunner),
 	}
 }

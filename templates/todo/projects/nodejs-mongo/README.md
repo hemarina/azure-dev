@@ -14,18 +14,8 @@ Let's jump in and get the ToDo app up and running in Azure. When you are finishe
 
 The following prerequisites are required to use this application. Please ensure that you have them all installed locally.
 
-- [Azure Developer CLI](https://aka.ms/azure-dev/install)
-  - Windows:
-    ```powershell
-    powershell -ex AllSigned -c "Invoke-RestMethod 'https://aka.ms/install-azd.ps1' | Invoke-Expression"
-    ```
-  - Linux/MacOS:
-    ```
-    curl -fsSL https://aka.ms/install-azd.sh | bash
-    ```
-- [Azure CLI (2.38.0+)](https://docs.microsoft.com/cli/azure/install-azure-cli)
+- [Azure Developer CLI](https://aka.ms/azd-install)
 - [Node.js with npm (16.13.1+)](https://nodejs.org/) - for API backend and Web frontend
-- [Git (2.36.1+)](https://git-scm.com/)
 PLACEHOLDERIACTOOLS
 
 ### Quickstart
@@ -90,7 +80,7 @@ The repo is structured to follow the [Azure Developer CLI](https://aka.ms/azure-
 
 ### Azure Subscription
 
-This template will create infrastructure and deploy code to Azure. If you don't have an Azure Subscription, you can sign up for a [free account here](https://azure.microsoft.com/free/).
+This template will create infrastructure and deploy code to Azure. If you don't have an Azure Subscription, you can sign up for a [free account here](https://azure.microsoft.com/free/). Make sure you have contributor role to the Azure subscription.
 
 ### Azure Developer CLI - VS Code Extension
 
@@ -183,7 +173,7 @@ Sometimes, things go awry. If you happen to run into issues, then please review 
 
 ### Roles
 
-This template creates a [managed identity](https://docs.microsoft.com/azure/active-directory/managed-identities-azure-resources/overview) for your app inside your Azure Active Directory tenant, and it is used to authenticate your app with Azure and other services that support Azure AD authentication like Key Vault via access policies. You will see principalId referenced in the infrastructure as code files, that refers to the id of the currently logged in Azure CLI user, which will be granted access policies and permissions to run the application locally. To view your managed identity in the Azure Portal, follow these [steps](https://docs.microsoft.com/azure/active-directory/managed-identities-azure-resources/how-to-view-managed-identity-service-principal-portal).
+This template creates a [managed identity](https://docs.microsoft.com/azure/active-directory/managed-identities-azure-resources/overview) for your app inside your Azure Active Directory tenant, and it is used to authenticate your app with Azure and other services that support Azure AD authentication like Key Vault via access policies. You will see principalId referenced in the infrastructure as code files, that refers to the id of the currently logged in Azure Developer CLI user, which will be granted access policies and permissions to run the application locally. To view your managed identity in the Azure Portal, follow these [steps](https://docs.microsoft.com/azure/active-directory/managed-identities-azure-resources/how-to-view-managed-identity-service-principal-portal).
 
 ### Key Vault
 
@@ -191,19 +181,7 @@ This template uses [Azure Key Vault](https://docs.microsoft.com/azure/key-vault/
 
 ## Uninstall
 
-To uninstall the Azure Developer CLI:
-
-Windows:
-
-```
-powershell -ex AllSigned -c "Invoke-RestMethod 'https://aka.ms/uninstall-azd.ps1' | Invoke-Expression"
-```
-
-Linux/MacOS:
-
-```
-curl -fsSL https://aka.ms/uninstall-azd.sh | bash
-```
+To remove the Azure Developer CLI, refer to [uninstall Azure Developer CLI](https://aka.ms/azd-install?tabs=baremetal%2Cwindows#uninstall-azd).
 
 ## Reporting Issues and Feedback
 

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/blang/semver/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,15 +72,11 @@ func Test_EnsureInstalled(t *testing.T) {
 	}
 
 	t.Run("HaveAll", func(t *testing.T) {
-		resetConfirmedTools()
-
 		err := EnsureInstalled(context.Background(), installedToolOne, installedToolTwo)
 		assert.NoError(t, err)
 	})
 
 	t.Run("MissingOne", func(t *testing.T) {
-		resetConfirmedTools()
-
 		err := EnsureInstalled(context.Background(), installedToolOne, missingToolOne)
 		assert.Error(t, err)
 		assert.Regexp(t, regexp.MustCompile(regexp.QuoteMeta(missingToolOne.Name())), err.Error())
@@ -87,8 +84,6 @@ func Test_EnsureInstalled(t *testing.T) {
 	})
 
 	t.Run("MissingMany", func(t *testing.T) {
-		resetConfirmedTools()
-
 		err := EnsureInstalled(context.Background(), installedToolOne, missingToolOne, missingToolTwo)
 		assert.Error(t, err)
 		assert.Regexp(t, regexp.MustCompile(regexp.QuoteMeta(missingToolOne.Name())), err.Error())
@@ -118,6 +113,41 @@ func (m *mockTool) Name() string {
 	return m.name
 }
 
-func resetConfirmedTools() {
-	confirmedTools = map[string]bool{}
+func TestExtractVersion(t *testing.T) {
+	type args struct {
+		cliOutput string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    semver.Version
+		wantErr bool
+	}{
+		// Structured
+		{"BetaWithBuild", args{"tool 18.1.2-beta+1234"}, semver.Version{Major: 18, Minor: 1, Patch: 2}, false},
+		{"Beta", args{"tool 18.1.2-beta"}, semver.Version{Major: 18, Minor: 1, Patch: 2}, false},
+		{"MajorMinorPatch", args{"tool 18.1.2"}, semver.Version{Major: 18, Minor: 1, Patch: 2}, false},
+		{"MajorMinor", args{"tool 18.1"}, semver.Version{Major: 18, Minor: 1}, false},
+		{"MajorMinorWithLetter", args{"18.1.b"}, semver.Version{Major: 18, Minor: 1}, false},
+		{"Major", args{"tool 18"}, semver.Version{Major: 18}, false},
+		{"MajorWithLetters", args{"18.a.b"}, semver.Version{Major: 18}, false},
+		// Less structured output
+		{"Prefixed", args{"tool v18.1.2, build 123"}, semver.Version{Major: 18, Minor: 1, Patch: 2}, false},
+		{"Infixed", args{"tool v18.1.2sha123123"}, semver.Version{Major: 18, Minor: 1, Patch: 2}, false},
+		// Failures
+		{"Empty", args{""}, semver.Version{}, true},
+		{"NoNumber", args{"tool"}, semver.Version{}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ExtractVersion(tt.args.cliOutput)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

@@ -16,8 +16,38 @@ repo:
 
   rewrite:
     rules:
-      - from: ../../../../../../common/infra/terraform/applicationinsights
+      - from: ../../../../../../common/infra/terraform/core/monitor/applicationinsights
         to: ./modules/applicationinsights
+        patterns:
+          - "**/*.tf"
+
+      - from: ../../../../../../common/infra/terraform/core/monitor/loganalytics
+        to: ./modules/loganalytics
+        patterns:
+          - "**/*.tf"
+
+      - from: ../../../../../../common/infra/terraform/core/security/keyvault
+        to: ./modules/keyvault
+        patterns:
+          - "**/*.tf"
+
+      - from: ../../../../../../common/infra/terraform/core/database/cosmos
+        to: ./modules/cosmos
+        patterns:
+          - "**/*.tf"
+      
+      - from: ../../../../../../common/infra/terraform/core/host/appserviceplan
+        to: ./modules/appserviceplan
+        patterns:
+          - "**/*.tf"
+
+      - from: ../../../../../../common/infra/terraform/core/host/appservice/appservicenode
+        to: ./modules/appservicenode
+        patterns:
+          - "**/*.tf"
+
+      - from: ../../../../../../common/infra/terraform/core/host/appservice/appservicepython
+        to: ./modules/appservicepython
         patterns:
           - "**/*.tf"
 
@@ -79,13 +109,36 @@ repo:
         - .github/**/*
         - .devcontainer/**/*
         - "infra/**/*"
+        - .azdo/pipelines/*/azure-dev.yml
+
+    # AzDo workflows for bicep
+    - from: ../../../../../common/.azdo/pipelines/terraform/azure-dev.yml
+      to: ./.azdo/pipelines/azure-dev.yml
 
     # Github workflows for terraform
     - from: ../../../../../common/.github/workflows/terraform
       to: ./.github/workflows
 
-    - from: ../../../../../common/infra/terraform/applicationinsights
+    - from: ../../../../../common/infra/terraform/core/monitor/applicationinsights
       to: ./infra/modules/applicationinsights
+
+    - from: ../../../../../common/infra/terraform/core/monitor/loganalytics
+      to: ./infra/modules/loganalytics
+    
+    - from: ../../../../../common/infra/terraform/core/security/keyvault
+      to: ./infra/modules/keyvault
+
+    - from: ../../../../../common/infra/terraform/core/database/cosmos
+      to: ./infra/modules/cosmos
+
+    - from: ../../../../../common/infra/terraform/core/host/appserviceplan
+      to: ./infra/modules/appserviceplan
+
+    - from: ../../../../../common/infra/terraform/core/host/appservice/appservicenode
+      to: ./infra/modules/appservicenode
+    
+    - from: ../../../../../common/infra/terraform/core/host/appservice/appservicepython
+      to: ./infra/modules/appservicepython
 
     # .devcontainer common (devcontainer.json)
     - from: ../../../../../common/.devcontainer/devcontainer.json/python/terraform
@@ -103,6 +156,10 @@ repo:
     - from: ../../../../common/tests
       to: ./tests
 
+    # Auth Python common
+    - from: ../../../../common/auth/py
+      to: ./src/api/todo
+      
     # Python API
     - from: ../../../../api/python
       to: ./src/api

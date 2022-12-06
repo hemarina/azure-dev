@@ -17,20 +17,20 @@ import (
 const SecretOrRandomPasswordCommandName string = "secretOrRandomPassword"
 
 type SecretOrRandomPasswordCommandExecutor struct {
-	ctx            context.Context
-	azCli          azcli.AzCli
-	subscriptionId string
+	azCli azcli.AzCli
 }
 
-func NewSecretOrRandomPasswordExecutor(ctx context.Context, azCli azcli.AzCli, subscriptionId string) SecretOrRandomPasswordCommandExecutor {
-	return SecretOrRandomPasswordCommandExecutor{
-		ctx:            ctx,
-		azCli:          azCli,
-		subscriptionId: subscriptionId,
+func NewSecretOrRandomPasswordExecutor(azCli azcli.AzCli) *SecretOrRandomPasswordCommandExecutor {
+	return &SecretOrRandomPasswordCommandExecutor{
+		azCli: azCli,
 	}
 }
 
-func (e SecretOrRandomPasswordCommandExecutor) Run(commandName string, args []string) (bool, string, error) {
+func (e *SecretOrRandomPasswordCommandExecutor) Run(
+	ctx context.Context,
+	commandName string,
+	args []string,
+) (bool, string, error) {
 	if commandName != SecretOrRandomPasswordCommandName {
 		return false, "", nil
 	}
@@ -48,15 +48,20 @@ func (e SecretOrRandomPasswordCommandExecutor) Run(commandName string, args []st
 	keyVaultName := args[0]
 	secretName := args[1]
 
-	if e.ctx == nil || e.azCli == nil || len(e.subscriptionId) == 0 {
+	if ctx == nil || e.azCli == nil {
 		// Should never happen really...
 		return false, "", fmt.Errorf("missing context information for %s command", SecretOrRandomPasswordCommandName)
 	}
 
-	secret, err := e.azCli.GetKeyVaultSecret(e.ctx, e.subscriptionId, keyVaultName, secretName)
+	secret, err := e.azCli.GetKeyVaultSecret(ctx, keyVaultName, secretName)
 	if err != nil {
 		if errors.Is(err, azcli.ErrAzCliSecretNotFound) {
-			log.Printf("%s: secret '%s' not found in vault '%s', using random password...", SecretOrRandomPasswordCommandName, secretName, keyVaultName)
+			log.Printf(
+				"%s: secret '%s' not found in vault '%s', using random password...",
+				SecretOrRandomPasswordCommandName,
+				secretName,
+				keyVaultName,
+			)
 			return generatePassword()
 		} else {
 			return false, "", fmt.Errorf("reading secret '%s' from vault '%s': %w", secretName, keyVaultName, err)
@@ -64,7 +69,12 @@ func (e SecretOrRandomPasswordCommandExecutor) Run(commandName string, args []st
 	}
 
 	if len(strings.TrimSpace(secret.Value)) == 0 {
-		log.Printf("%s: secret '%s' in vault '%s' has empty value, using random password...", SecretOrRandomPasswordCommandName, secretName, keyVaultName)
+		log.Printf(
+			"%s: secret '%s' in vault '%s' has empty value, using random password...",
+			SecretOrRandomPasswordCommandName,
+			secretName,
+			keyVaultName,
+		)
 		return generatePassword() // Do not use empty password secret even if the secret exists
 	}
 

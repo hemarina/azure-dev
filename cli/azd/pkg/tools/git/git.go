@@ -23,20 +23,22 @@ type GitCli interface {
 	FetchCode(ctx context.Context, repositoryPath string, branch string, target string) error
 	InitRepo(ctx context.Context, repositoryPath string) error
 	AddRemote(ctx context.Context, repositoryPath string, remoteName string, remoteUrl string) error
+	UpdateRemote(ctx context.Context, repositoryPath string, remoteName string, remoteUrl string) error
 	GetCurrentBranch(ctx context.Context, repositoryPath string) (string, error)
 	AddFile(ctx context.Context, repositoryPath string, filespec string) error
 	Commit(ctx context.Context, repositoryPath string, message string) error
 	PushUpstream(ctx context.Context, repositoryPath string, origin string, branch string) error
 	IsUntrackedFile(ctx context.Context, repositoryPath string, filePath string) (bool, error)
+	SetCredentialStore(ctx context.Context, repositoryPath string) error
 }
 
 type gitCli struct {
 	commandRunner exec.CommandRunner
 }
 
-func NewGitCli(ctx context.Context) GitCli {
+func NewGitCli(commandRunner exec.CommandRunner) GitCli {
 	return &gitCli{
-		commandRunner: exec.GetCommandRunner(ctx),
+		commandRunner: commandRunner,
 	}
 }
 
@@ -58,11 +60,11 @@ func (cli *gitCli) CheckInstalled(ctx context.Context) (bool, error) {
 	if !found {
 		return false, err
 	}
-	gitRes, err := tools.ExecuteCommand(ctx, "git", "--version")
+	gitRes, err := tools.ExecuteCommand(ctx, cli.commandRunner, "git", "--version")
 	if err != nil {
 		return false, fmt.Errorf("checking %s version: %w", cli.Name(), err)
 	}
-	gitSemver, err := tools.ExtractSemver(gitRes)
+	gitSemver, err := tools.ExtractVersion(gitRes)
 	if err != nil {
 		return false, fmt.Errorf("converting to semver version fails: %w", err)
 	}
@@ -140,11 +142,38 @@ func (cli *gitCli) InitRepo(ctx context.Context, repositoryPath string) error {
 		return fmt.Errorf("failed to init repository: %s: %w", res.String(), err)
 	}
 
+	// Set initial branch to main
+	runArgs = exec.NewRunArgs("git", "-C", repositoryPath, "checkout", "-b", "main")
+	res, err = cli.commandRunner.Run(ctx, runArgs)
+	if err != nil {
+		return fmt.Errorf("failed to create main branch: %s: %w", res.String(), err)
+	}
+
+	return nil
+}
+
+func (cli *gitCli) SetCredentialStore(ctx context.Context, repositoryPath string) error {
+	runArgs := exec.NewRunArgs("git", "-C", repositoryPath, "config", "credential.helper", "store")
+	res, err := cli.commandRunner.Run(ctx, runArgs)
+	if err != nil {
+		return fmt.Errorf("failed to set credential store repository: %s: %w", res.String(), err)
+	}
+
 	return nil
 }
 
 func (cli *gitCli) AddRemote(ctx context.Context, repositoryPath string, remoteName string, remoteUrl string) error {
 	runArgs := exec.NewRunArgs("git", "-C", repositoryPath, "remote", "add", remoteName, remoteUrl)
+	res, err := cli.commandRunner.Run(ctx, runArgs)
+	if err != nil {
+		return fmt.Errorf("failed to add remote: %s: %w", res.String(), err)
+	}
+
+	return nil
+}
+
+func (cli *gitCli) UpdateRemote(ctx context.Context, repositoryPath string, remoteName string, remoteUrl string) error {
+	runArgs := exec.NewRunArgs("git", "-C", repositoryPath, "remote", "set-url", remoteName, remoteUrl)
 	res, err := cli.commandRunner.Run(ctx, runArgs)
 	if err != nil {
 		return fmt.Errorf("failed to add remote: %s: %w", res.String(), err)
